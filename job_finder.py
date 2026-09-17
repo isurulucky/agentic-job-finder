@@ -16,23 +16,26 @@ class ExtractedJobs(BaseModel):
 async def run_agent(target_url, keywords):    
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
-    # Initialize Browser
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(headless=False)
-    page = await browser.new_page()
+    
+    # Explicitly create the context to set standard browser locales/headers
+    context = await browser.new_context()
+    page = await context.new_page()
     
     print(f"[*] Navigating to {target_url}...")
-    await page.goto(target_url)
-    try:
-        await page.wait_for_load_state("networkidle", timeout=5000)
-    except Exception as e:
-        raise e
-
-    # Tools
     
+    # Enforce the network idle directly in the goto command
+    try:
+        await page.goto(target_url, wait_until="networkidle", timeout=30000)
+    except Exception as e:
+        raise Exception(f"[*] Initial load error: {e}")
+
+    # Tools 
     @tool
     async def get_page_state() -> str:
         """Returns the current interactive elements on the screen. Always call this first to see what you can interact with."""
+
         # JS snippet to inject 'agent-id' and build a clean tree of visible elements
         js_script = """
         () => {
@@ -66,10 +69,19 @@ async def run_agent(target_url, keywords):
         - action: Must be one of 'click', 'fill', 'check', 'select'.
         - value: The text to type (for 'fill') or option to choose (for 'select'). Empty for click/check.
         """
-        print(f"[*] Agent executing: {action} on element ID {agent_id} with value '{value}'")
         locator = page.locator(f"[agent-id='{agent_id}']").first
         
         try:
+            # --- IMPROVEMENT 1: Debug Logs ---
+            # Extract the text of the element the LLM is targeting
+            element_text = await locator.evaluate("(el) => el.innerText || el.placeholder || el.value || el.getAttribute('aria-label') || 'No Text'")
+            element_text = element_text.strip()[:50].replace('\n', ' ')
+            
+            print(f"\n[*] ACTION: {action.upper()} | ID: {agent_id} | TARGET: '{element_text}' | INPUT: '{value}'")
+            
+            prev_url = page.url
+            
+            # Execute action
             if action == "click":
                 await locator.click()
             elif action == "fill":
@@ -79,14 +91,26 @@ async def run_agent(target_url, keywords):
                 await locator.check()
             elif action == "select":
                 await locator.select_option(label=value)
-            else:
-                raise ValueError(f"unknown action: {action}")
             
-            # Wait for any resulting network activity or DOM changes
-            await asyncio.sleep(2)
-            return f"Successfully performed {action} on element {agent_id}."
+            # Wait for network requests or navigation to settle
+            await page.wait_for_timeout(3000) 
+            
+            # --- IMPROVEMENT 2: LLM Feedback Loop ---
+            current_url = page.url
+            feedback = f"Action '{action}' executed on element {agent_id}."
+            
+            if current_url != prev_url:
+                feedback += f" The browser navigated to a new URL: {current_url}."
+            else:
+                feedback += " The URL did not change, but the page content may have updated dynamically."
+                
+            feedback += " You MUST call get_page_state next to observe the new elements."
+            return feedback
+            
         except Exception as e:
-            return f"Failed to perform {action} on {agent_id}: {str(e)}"
+            error_msg = f"Failed to perform {action} on {agent_id}: {str(e)}"
+            print(f"[!] {error_msg}")
+            return error_msg
 
     @tool
     async def extract_and_print_urls() -> str:
@@ -118,8 +142,13 @@ async def run_agent(target_url, keywords):
     # Agent loop
     
     messages = [
-        SystemMessage(content="You are a job search automation agent. Your goal is to navigate career portals, handle cookie banners, search/filter for jobs, and finally extract URLs of opportunities which match given keywords. Use tools to observe and act."),
-        HumanMessage(content=f"Find jobs matching: {keywords}. First, observe the page state.")
+        SystemMessage(content="""You are a helpful web scraper agent finding job vacancies.
+        Strict Workflow Rules:
+        1. ALWAYS call `get_page_state` first to see available elements.
+        2. Identify buttons or links to navigate to unfiltered vacancy list, or input boxes to enter keywords. If you are in an unfiltered vacany list page, use keywords to filter by entering them in a search box or finding other elements for filtering such as drop downs, checkboxes, etc. Use the `interact` tool to click or type.
+        3. After EVERY `interact` action, you MUST call `get_page_state` again to verify if the page changed. Do not guess what happened.
+        4. When you successfully reach a list of matching job vacancies, call `extract_and_print_urls` to finish."""),
+        HumanMessage(content=f"Find jobs matching: {keywords}. Begin by observing the page state.")
     ]
 
     for iteration in range(1, 11):
