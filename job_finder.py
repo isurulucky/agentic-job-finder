@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import time
 import html2text
 from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright
@@ -13,7 +14,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 class ExtractedJobs(BaseModel):
     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
 
-async def run_agent(target_url, keywords):    
+async def run_agent(target_url, keywords, location):    
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
     playwright = await async_playwright().start()
@@ -37,6 +38,8 @@ async def run_agent(target_url, keywords):
         """Returns the current interactive elements on the screen. Always call this first to see what you can interact with."""
 
         # JS snippet to inject 'agent-id' and build a clean tree of visible elements
+        print("\n[*] Retrieving current page state")
+
         js_script = """
         () => {
             const elements = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="checkbox"]');
@@ -72,10 +75,9 @@ async def run_agent(target_url, keywords):
         locator = page.locator(f"[agent-id='{agent_id}']").first
         
         try:
-            # --- IMPROVEMENT 1: Debug Logs ---
             # Extract the text of the element the LLM is targeting
             element_text = await locator.evaluate("(el) => el.innerText || el.placeholder || el.value || el.getAttribute('aria-label') || 'No Text'")
-            element_text = element_text.strip()[:50].replace('\n', ' ')
+            element_text = element_text.strip()[:100].replace('\n', ' ')
             
             print(f"\n[*] ACTION: {action.upper()} | ID: {agent_id} | TARGET: '{element_text}' | INPUT: '{value}'")
             
@@ -95,7 +97,7 @@ async def run_agent(target_url, keywords):
             # Wait for network requests or navigation to settle
             await page.wait_for_timeout(3000) 
             
-            # --- IMPROVEMENT 2: LLM Feedback Loop ---
+            # LLM Feedback 
             current_url = page.url
             feedback = f"Action '{action}' executed on element {agent_id}."
             
@@ -114,25 +116,72 @@ async def run_agent(target_url, keywords):
 
     @tool
     async def extract_and_print_urls() -> str:
-        """Extracts job URLs from the current page matching the user's keywords and prints them to the console. Call this ONLY when you see job listings."""
-        print("\n[*] Tool called: Extracting DOM to Markdown...")
+        """Extracts job URLs from the current page matching the user's keywords and prints them to the console."""
+        print("\n[*] Tool called: Extracting job links directly from DOM...")
         
-        html_converter = html2text.HTML2Text()
-        html_converter.ignore_links = False
-        html_converter.ignore_images = True
+        # Wait a moment for dynamic job cards to render in React/Vue
+        await page.wait_for_timeout(2000)
         
-        html_content = await page.content()
-        markdown = html_converter.handle(html_content)[:15000] # Truncate for safety
+        # Extract all visible links with their inner text and full absolute hrefs
+        js_extract = """
+        () => {
+            const links = Array.from(document.querySelectorAll('a[href]'));
+            return links
+                .map(a => ({
+                    text: (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
+                    href: a.href // Absolute URL
+                }))
+                .filter(item => item.text.length > 0 && item.href.startsWith('http'));
+        }
+        """
+        raw_links = await page.evaluate(js_extract)
         
-        extract_prompt = f"Extract matching job URLs for keywords: '{keywords}' from this markdown:\n\n{markdown}"
+        # Deduplicate links
+        unique_links = {link['href']: link['text'] for link in raw_links}
+        formatted_links = [f"Text: '{text}' | URL: {href}" for href, text in unique_links.items()]
+        
+        # Truncate string representation if page has hundreds of nav links
+        links_text = "\n".join(formatted_links[:150]) 
+        
+        # Ask LLM to pick ONLY job vacancy URLs from the clean list
+        extract_prompt = f"""
+        Given this list of links on a career page, extract ONLY the URLs that correspond to specific job vacancies matching keywords: '{keywords}'.
+        Ignore generic navigation links (like 'About Us', 'Privacy', 'Categories').
+        
+        Links:
+        {links_text}
+        """
+        
         extractor = llm.with_structured_output(ExtractedJobs)
-        result = await extractor.ainvoke(extract_prompt)
+        result = extractor.invoke(extract_prompt)
         
         print("\n=== FINAL EXTRACTED JOB URLS ===")
         for url in result.job_urls:
             print(url)
             
         return "SUCCESS_EXTRACTED_AND_PRINTED"
+
+    # @tool
+    # async def extract_and_print_urls() -> str:
+    #     """Extracts job URLs from the current page matching the user's keywords and prints them to the console. Call this ONLY when you see job listings."""
+    #     print("\n[*] Tool called: Extracting DOM to Markdown...")
+        
+    #     html_converter = html2text.HTML2Text()
+    #     html_converter.ignore_links = False
+    #     html_converter.ignore_images = True
+        
+    #     html_content = await page.content()
+    #     markdown = html_converter.handle(html_content)[:15000] # Truncate for safety
+        
+    #     extract_prompt = f"Extract matching job URLs for keywords: '{keywords}' from this markdown:\n\n{markdown}"
+    #     extractor = llm.with_structured_output(ExtractedJobs)
+    #     result = await extractor.ainvoke(extract_prompt)
+        
+    #     print("\n=== FINAL EXTRACTED JOB URLS ===")
+    #     for url in result.job_urls:
+    #         print(url)
+            
+    #     return "SUCCESS_EXTRACTED_AND_PRINTED"
 
     # Bind tools to the LLM
     tools = [get_page_state, interact, extract_and_print_urls]
@@ -142,23 +191,27 @@ async def run_agent(target_url, keywords):
     # Agent loop
     
     messages = [
-        SystemMessage(content="""You are a helpful web scraper agent finding job vacancies.
-        Strict Workflow Rules:
-        1. ALWAYS call `get_page_state` first to see available elements.
-        2. Identify buttons or links to navigate to unfiltered vacancy list, or input boxes to enter keywords. If you are in an unfiltered vacany list page, use keywords to filter by entering them in a search box or finding other elements for filtering such as drop downs, checkboxes, etc. Use the `interact` tool to click or type.
-        3. After EVERY `interact` action, you MUST call `get_page_state` again to verify if the page changed. Do not guess what happened.
-        4. When you successfully reach a list of matching job vacancies, call `extract_and_print_urls` to finish."""),
-        HumanMessage(content=f"Find jobs matching: {keywords}. Begin by observing the page state.")
+        SystemMessage(content=f"""You are a helpful web scraper agent finding job vacancies matching the criteria: '{keywords} in: {location}'.
+
+    Strict Workflow Rules:
+    1. ALWAYS call `get_page_state` first to inspect the current interactive elements.
+    2. Handle blockers first: If a cookie banner, modal, or overlay is visible, click to accept/close it before doing anything else.
+    3. Determine navigation or filtering strategy at each step:
+    - If a search input or filter control (dropdown, checkbox) is available, enter the keywords or apply relevant filters.
+    - Otherwise, look for links/buttons which indicate all open vacancies, to select a specific location, a search field to navigate to the job listings page. 
+    4. Verify state after every action: After EVERY `interact` call, you MUST call `get_page_state` again to see what changed. Never assume an action succeeded.
+    5. Extraction & Termination: Once you see matching job vacancies (or an updated search results list), call `extract_and_print_urls` to complete the task."""),
+        HumanMessage(content="Begin by observing the page state.")
     ]
 
     for iteration in range(1, 11):
         print(f"\n--- Iteration {iteration}/10 ---")
         
-        # 1. Ask the LLM to reason and pick a tool
+        # Ask the LLM to reason and pick a tool
         ai_msg = llm_with_tools.invoke(messages)
         messages.append(ai_msg)
         
-        # 2. Check if the LLM decided to use a tool
+        # Check if the LLM decided to use a tool
         if not ai_msg.tool_calls:
             print("[*] Agent stopped calling tools. Text response:", ai_msg.content)
             break
@@ -181,11 +234,17 @@ async def run_agent(target_url, keywords):
                 await playwright.stop()
                 return
 
+            # Sleep 2 seconds
+            time.sleep(2)
+
     print("[*] Loop limit reached or extraction finished.")
     await browser.close()
     await playwright.stop()
 
 if __name__ == "__main__":
     target_url = "https://www.coolblue.nl/en/vacancies"
-    keywords = "data science, machine learning, python"
-    asyncio.run(run_agent(target_url, keywords))
+    # target_url = "https://www.leaseweb.com/en/about-us/career"
+    # target_url = "https://catawiki.careers/vacancies"
+    keywords = "Software Engineering"
+    location = "Europe"
+    asyncio.run(run_agent(target_url, keywords, location))
