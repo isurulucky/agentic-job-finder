@@ -216,7 +216,7 @@ async def run_agent(target_url, keywords, location):
             print("[*] Agent stopped calling tools. Text response:", ai_msg.content)
             break
             
-        # 3. Execute the chosen tool(s)
+        # Execute the chosen tool(s)
         for tool_call in ai_msg.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
@@ -227,7 +227,7 @@ async def run_agent(target_url, keywords, location):
             # Append the result back to the conversation history
             messages.append(ToolMessage(tool_call_id=tool_call["id"], content=str(tool_result)))
             
-            # 4. Termination condition
+            # Termination condition
             if tool_name == "extract_and_print_urls":
                 print("[*] Extraction complete. Terminating loop.")
                 await browser.close()
