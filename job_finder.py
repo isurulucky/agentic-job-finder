@@ -15,7 +15,8 @@ class ExtractedJobs(BaseModel):
     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
 
 async def run_agent(target_url, keywords, location):    
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    llm = ChatOpenAI(model="o4-mini", temperature=1)
+    # llm = ChatOpenAI(model="gpt-5.4-nano", temperature=0)
 
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(headless=False)
@@ -191,17 +192,19 @@ async def run_agent(target_url, keywords, location):
     # Agent loop
     
     messages = [
-        SystemMessage(content=f"""You are a helpful web scraper agent finding job vacancies matching the criteria: '{keywords} in: {location}'.
+        SystemMessage(content=f"""You are an autonomous web scraper finding job vacancies matching: '{keywords}' in '{location}'.
 
-    Strict Workflow Rules:
-    1. ALWAYS call `get_page_state` first to inspect the current interactive elements.
-    2. Handle blockers first: If a cookie banner, modal, or overlay is visible, click to accept/close it before doing anything else.
-    3. Determine navigation or filtering strategy at each step:
-    - If a search input or filter control (dropdown, checkbox) is available, enter the keywords or apply relevant filters.
-    - Otherwise, look for links/buttons which indicate all open vacancies, to select a specific location, a search field to navigate to the job listings page. 
-    4. Verify state after every action: After EVERY `interact` call, you MUST call `get_page_state` again to see what changed. Never assume an action succeeded.
-    5. Extraction & Termination: Once you see matching job vacancies (or an updated search results list), call `extract_and_print_urls` to complete the task."""),
-        HumanMessage(content="Begin by observing the page state.")
+        Strict Workflow Rules:
+        1. Scope: Only pursue career pages and job vacancies. Ignore general company pages, product searches, or blog posts.
+        2. ALWAYS call `get_page_state` first to inspect the current interactive elements.
+        3. Blockers First: Immediately close/accept cookie banners, modals, or overlays before taking other actions.
+        4. Navigation & Filtering Decision Tree (Iterate at each step):
+        - 4.1 Filter Controls: Apply '{keywords}' or '{location}' using career-specific filters (dropdowns, checkboxes). (Note: UI text may not match exactly; pick the closest logical match).
+        - 4.2 Career Links: Look for links navigating to job boards (e.g., 'All vacancies', 'Open roles', 'Search jobs').
+        - 4.3 Job Search Boxes: If no filters or links are found, enter keywords into a search input ONLY if it is clearly related to careers (e.g., 'Search open roles', 'Job title'). NEVER use generic global site search or product search bars.
+        5. State Verification: After EVERY `interact` call, you MUST call `get_page_state` again to see what changed. Never assume an action succeeded.
+        6. Extraction & Termination: Once you reach a list of matching job vacancies, call `extract_and_print_urls` to complete the task."""),
+            HumanMessage(content="Begin by observing the page state.")
     ]
 
     for iteration in range(1, 11):
@@ -235,15 +238,15 @@ async def run_agent(target_url, keywords, location):
                 return
 
             # Sleep 2 seconds
-            time.sleep(2)
+            time.sleep(3)
 
     print("[*] Loop limit reached or extraction finished.")
     await browser.close()
     await playwright.stop()
 
 if __name__ == "__main__":
-    target_url = "https://www.coolblue.nl/en/vacancies"
-    # target_url = "https://www.leaseweb.com/en/about-us/career"
+    # target_url = "https://www.coolblue.nl/en/vacancies"
+    target_url = "https://www.leaseweb.com/en/about-us/career"
     # target_url = "https://catawiki.careers/vacancies"
     keywords = "Software Engineering"
     location = "Europe"
