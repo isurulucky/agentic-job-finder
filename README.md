@@ -5,4 +5,6 @@ Agentic app capable of navigating career portals to find suitable opportunities 
 TODOs:
 -----
 
-Modify prompt to accept cookies etc. at any step.
+Improve prompt and re-act pattern
+save known site stuff locally?
+self improvement pattern?
