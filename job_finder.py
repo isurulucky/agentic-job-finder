@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key"
+state_version = 0
 
 class ExtractedJobs(BaseModel):
     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
@@ -34,45 +35,191 @@ async def run_agent(target_url, keywords, location):
         raise Exception(f"[*] Initial load error: {e}")
 
     # Tools 
+    # @tool
+    # async def get_page_state() -> str:
+    #     """Returns the current interactive elements on the screen. Always call this first to see what you can interact with."""
+
+    #     # JS snippet to inject 'agent-id' and build a clean tree of visible elements
+    #     print("\n[*] Retrieving current page state")
+
+    #     js_script = """
+    #     () => {
+    #         const elements = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="checkbox"]');
+    #         const tree = [];
+    #         let idCounter = 1;
+    #         elements.forEach(el => {
+    #             const rect = el.getBoundingClientRect();
+    #             if (rect.width === 0 || rect.height === 0) return; // Skip hidden
+                
+    #             el.setAttribute('agent-id', idCounter);
+    #             tree.push({
+    #                 id: idCounter,
+    #                 tag: el.tagName.toLowerCase(),
+    #                 text: (el.innerText || el.placeholder || el.value || el.getAttribute('aria-label') || '').substring(0, 60).trim(),
+    #                 type: el.type || el.getAttribute('role') || ''
+    #             });
+    #             idCounter++;
+    #         });
+    #         return JSON.stringify(tree, null, 2);
+    #     }
+    #     """
+    #     tree_json = await page.evaluate(js_script)
+    #     return f"Current Interactive Elements:\n{tree_json}"
+
+    # global state version to track ids against.
+
     @tool
     async def get_page_state() -> str:
-        """Returns the current interactive elements on the screen. Always call this first to see what you can interact with."""
+        """
+        Returns the current page state and a state_version identifying this
+        observation. Element IDs are only valid for this state_version.
+        Always call this before interacting with the page.
+        """
 
-        # JS snippet to inject 'agent-id' and build a clean tree of visible elements
-        print("\n[*] Retrieving current page state")
+        global state_version
+        state_version += 1
+
+        print(f"\n[*] Retrieving page state (version {state_version})")
 
         js_script = """
         () => {
-            const elements = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="checkbox"]');
-            const tree = [];
-            let idCounter = 1;
-            elements.forEach(el => {
+            const isVisible = (el) => {
                 const rect = el.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) return; // Skip hidden
-                
+                const style = window.getComputedStyle(el);
+
+                return (
+                    rect.width > 0 &&
+                    rect.height > 0 &&
+                    style.display !== 'none' &&
+                    style.visibility !== 'hidden'
+                );
+            };
+
+            const getText = (el) => {
+                return (
+                    el.innerText ||
+                    el.getAttribute('aria-label') ||
+                    el.getAttribute('title') ||
+                    el.placeholder ||
+                    el.value ||
+                    ''
+                )
+                .replace(/\\s+/g, ' ')
+                .trim()
+                .substring(0, 120);
+            };
+
+            const getLabel = (el) => {
+                if (el.id) {
+                    const label = document.querySelector(
+                        `label[for="${CSS.escape(el.id)}"]`
+                    );
+                    if (label) return label.innerText.trim();
+                }
+
+                const parentLabel = el.closest('label');
+                if (parentLabel) return parentLabel.innerText.trim();
+
+                return '';
+            };
+
+            const elements = document.querySelectorAll(
+                'a, button, input, select, textarea, ' +
+                '[role="button"], [role="checkbox"], [role="radio"], ' +
+                '[role="combobox"]'
+            );
+
+            const interactive = [];
+            let idCounter = 1;
+
+            elements.forEach(el => {
+                if (!isVisible(el)) return;
+
                 el.setAttribute('agent-id', idCounter);
-                tree.push({
+
+                const item = {
                     id: idCounter,
                     tag: el.tagName.toLowerCase(),
-                    text: (el.innerText || el.placeholder || el.value || el.getAttribute('aria-label') || '').substring(0, 60).trim(),
-                    type: el.type || el.getAttribute('role') || ''
-                });
+                    role: el.getAttribute('role') || '',
+                    text: getText(el),
+                    label: getLabel(el),
+                    type: el.type || '',
+                    disabled: !!el.disabled
+                };
+
+                // Useful for navigation decisions
+                if (el.tagName === 'A') {
+                    item.href = el.href;
+                }
+
+                // Useful for search/filter decisions
+                if (el.tagName === 'INPUT') {
+                    item.placeholder = el.placeholder || '';
+                    item.value = el.value || '';
+                    item.checked = !!el.checked;
+                }
+
+                // Expose available options so the agent doesn't need to guess
+                if (el.tagName === 'SELECT') {
+                    item.value = el.value || '';
+
+                    item.options = Array.from(el.options)
+                        .slice(0, 30)
+                        .map(option => ({
+                            text: option.text.trim(),
+                            value: option.value,
+                            selected: option.selected
+                        }));
+                }
+
+                if (
+                    el.tagName === 'BUTTON' ||
+                    el.getAttribute('role') === 'button'
+                ) {
+                    item.expanded = el.getAttribute('aria-expanded');
+                }
+
+                interactive.push(item);
                 idCounter++;
             });
-            return JSON.stringify(tree, null, 2);
+
+            return {
+                url: window.location.href,
+                title: document.title,
+                elements: interactive
+            };
         }
         """
-        tree_json = await page.evaluate(js_script)
-        return f"Current Interactive Elements:\n{tree_json}"
+
+        state = await page.evaluate(js_script)
+
+        result = {
+            "state_version": state_version,
+            **state
+        }
+
+        return json.dumps(result, indent=2)
 
     @tool
-    async def interact(agent_id: int, action: str, value: str = "") -> str:
+    async def interact(state_version: int, agent_id: int, action: str, value: str = "") -> str:
         """
         Interacts with an element. 
+        - state_version: version of the state as determined by 'get_page_state'. 
         - agent_id: The exact integer ID of the element from get_page_state.
         - action: Must be one of 'click', 'fill', 'check', 'select'.
         - value: The text to type (for 'fill') or option to choose (for 'select'). Empty for click/check.
         """
+        if state_version != globals()["state_version"]:
+            return json.dumps({
+                "success": False,
+                "error": "STALE_STATE",
+                "message": (
+                    f"Element IDs belong to state {state_version}, "
+                    f"but the current state is {globals()['state_version']}. "
+                    "Call get_page_state before interacting."
+                )
+            })
+
         locator = page.locator(f"[agent-id='{agent_id}']").first
         
         try:
@@ -203,10 +350,11 @@ async def run_agent(target_url, keywords, location):
         2. Remove consent forms, cookie banners, modals, and other blockers in each step.
         3. Only navigate career/job pages. Ignore generic sites, product, blog, documentation, or unrelated search pages.
         4. Prefer, in order:
-        a) relevant career filters,
-        b) links to job-search/vacancy pages,
-        c) clearly career-specific search inputs.
-        Never use generic site search.
+            a) relevant career filters,
+            b) links to job-search/vacancy pages,
+            c) clearly career-specific search inputs.
+            Only enter search text on searchable text fields, not anything else.
+            Never use generic site search.
         5. After EVERY `interact`, call `get_page_state` again. Never assume an action succeeded.
         6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
         7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
