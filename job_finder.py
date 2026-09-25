@@ -190,21 +190,35 @@ async def run_agent(target_url, keywords, location):
     tools_map = {t.name: t for t in tools}
 
     # Agent loop
-    
     messages = [
-        SystemMessage(content=f"""You are an autonomous web scraper finding job vacancies matching: '{keywords}' in '{location}'.
+        SystemMessage(content=f"""
+        You are an autonomous web agent finding job vacancies matching:
+        - Keywords: "{keywords}"
+        - Location: "{location}"
 
-        Strict Workflow Rules:
-        1. Scope: Only pursue career pages and job vacancies. Ignore general company pages, product searches, or blog posts.
-        2. ALWAYS call `get_page_state` first to inspect the current interactive elements.
-        3. Blockers First: Immediately close/accept cookie banners, modals, or overlays before taking other actions.
-        4. Navigation & Filtering Decision Tree (Iterate at each step):
-        - 4.1 Filter Controls: Apply '{keywords}' or '{location}' using career-specific filters (dropdowns, checkboxes). (Note: UI text may not match exactly; pick the closest logical match).
-        - 4.2 Career Links: Look for links navigating to job boards (e.g., 'All vacancies', 'Open roles', 'Search jobs').
-        - 4.3 Job Search Boxes: If no filters or links are found, enter keywords into a search input ONLY if it is clearly related to careers (e.g., 'Search open roles', 'Job title'). NEVER use generic global site search or product search bars.
-        5. State Verification: After EVERY `interact` call, you MUST call `get_page_state` again to see what changed. Never assume an action succeeded.
-        6. Extraction & Termination: Once you reach a list of matching job vacancies, call `extract_and_print_urls` to complete the task."""),
-            HumanMessage(content="Begin by observing the page state.")
+        Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat.
+
+        Rules:
+        1. ALWAYS call `get_page_state` before acting.
+        2. Remove consent forms, cookie banners, modals, and other blockers in each step.
+        3. Only navigate career/job pages. Ignore generic sites, product, blog, documentation, or unrelated search pages.
+        4. Prefer, in order:
+        a) relevant career filters,
+        b) links to job-search/vacancy pages,
+        c) clearly career-specific search inputs.
+        Never use generic site search.
+        5. After EVERY `interact`, call `get_page_state` again. Never assume an action succeeded.
+        6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
+        7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
+        8. Once matching vacancies are found, call `extract_and_print_urls`.
+        9. If no matching vacancies can be found after exhausting relevant paths,
+        return no URLs rather than inventing them.
+
+        At every step, choose the single next action that makes the most progress
+        toward finding matching vacancies.
+        """),
+
+        HumanMessage(content="Begin by observing the page state.")
     ]
 
     for iteration in range(1, 11):
@@ -248,6 +262,6 @@ if __name__ == "__main__":
     # target_url = "https://www.coolblue.nl/en/vacancies"
     target_url = "https://www.leaseweb.com/en/about-us/career"
     # target_url = "https://catawiki.careers/vacancies"
-    keywords = "Software Engineering"
+    keywords = "Backend Software Engineering"
     location = "Europe"
     asyncio.run(run_agent(target_url, keywords, location))
