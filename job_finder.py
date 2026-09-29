@@ -38,8 +38,9 @@ async def run_agent(target_url, keywords, location):
     async def get_page_state() -> str:
         """
         Returns the current page state and a state_version identifying this
-        observation. Element IDs are only valid for this state_version.
+        observation.
 
+        Element state_ids are only valid for this state_version.
         Always call this before interacting with the page.
         """
 
@@ -47,7 +48,10 @@ async def run_agent(target_url, keywords, location):
 
         state_version += 1
 
-        print(f"\n[*] Retrieving page state (version {state_version})")
+        print(
+            f"\n[*] Retrieving page state "
+            f"(version {state_version})"
+        )
 
         js_script = """
         () => {
@@ -55,14 +59,13 @@ async def run_agent(target_url, keywords, location):
             const isVisible = (el) => {
                 const rect = el.getBoundingClientRect();
                 const style = window.getComputedStyle(el);
-                const opacity = parseFloat(style.opacity);
 
                 return (
                     rect.width > 0 &&
                     rect.height > 0 &&
                     style.display !== 'none' &&
                     style.visibility !== 'hidden' &&
-                    opacity > 0.5 &&
+                    parseFloat(style.opacity) > 0.5 &&
                     style.pointerEvents !== 'none'
                 );
             };
@@ -89,130 +92,198 @@ async def run_agent(target_url, keywords, location):
                 ].some(term => text.includes(term));
             };
 
-            const getText = (el) => {
-
-                return (
-                    el.innerText ||
-                    el.getAttribute('aria-label') ||
-                    el.getAttribute('title') ||
-                    el.placeholder ||
-                    el.value ||
-                    ''
-                )
-                .replace(/\\s+/g, ' ')
-                .trim()
-                .substring(0, 120);
-            };
-
-            const getLabel = (el) => {
-
+            const getName = (el) => {
+                // Explicit label
                 if (el.id) {
-
                     const label = document.querySelector(
                         `label[for="${CSS.escape(el.id)}"]`
                     );
 
                     if (label) {
-                        return label.innerText.trim();
+                        const text = label.innerText
+                            .replace(/\\s+/g, ' ')
+                            .trim();
+
+                        if (text) return text;
                     }
                 }
 
+                // Label wrapping the element
                 const parentLabel = el.closest('label');
 
                 if (parentLabel) {
-                    return parentLabel.innerText.trim();
+                    const text = parentLabel.innerText
+                        .replace(/\\s+/g, ' ')
+                        .trim();
+
+                    if (text) return text;
                 }
 
+                // Accessible name
                 const ariaLabel = el.getAttribute('aria-label');
 
                 if (ariaLabel) {
                     return ariaLabel.trim();
                 }
 
+                // Title
+                const title = el.getAttribute('title');
+
+                if (title) {
+                    return title.trim();
+                }
+
+                // Placeholder for text inputs
+                if (el.placeholder) {
+                    return el.placeholder.trim();
+                }
+
+                // Visible text
+                const text = el.innerText
+                    .replace(/\\s+/g, ' ')
+                    .trim();
+
+                if (text) {
+                    return text.substring(0, 120);
+                }
+
+                // Input value as final fallback
+                if (el.value) {
+                    return String(el.value)
+                        .replace(/\\s+/g, ' ')
+                        .trim()
+                        .substring(0, 120);
+                }
+
                 return '';
             };
 
-            const elements = document.querySelectorAll(
-                'a, button, input, select, textarea, ' +
-                '[role="button"], [role="checkbox"], [role="radio"], ' +
-                '[role="combobox"]'
-            );
-
             const interactive = [];
-            let idCounter = 1;
 
-            elements.forEach(el => {
+            let stateId = 1;
 
-                // Ignore hidden elements, including hidden backing
-                // <select> elements used by custom dropdowns.
+            const addElement = (el, type, extra = {}) => {
                 if (!isVisible(el)) return;
 
-                if (el.tagName === 'INPUT' &&isBlockedInput(el)) return;
+                el.setAttribute('state-id', stateId);
 
-                el.setAttribute('agent-id', idCounter);
+                interactive.push({
+                    state_id: stateId,
+                    type: type,
+                    name: getName(el),
+                    disabled: !!el.disabled,
+                    ...extra
+                });
 
-                const tag = el.tagName.toLowerCase();
+                stateId++;
+            };
 
-                const item = {
-                    id: idCounter,
-                    tag: tag,
-                    role: el.getAttribute('role') || '',
-                    text: getText(el),
-                    label: getLabel(el),
-                    type: el.type || '',
-                    disabled: !!el.disabled
-                };
+            /*
+            * 1. Buttons
+            *
+            * Includes native buttons and elements using role="button".
+            * Cookie/consent buttons remain visible.
+            */
+            document.querySelectorAll(
+                'button, [role="button"]'
+            ).forEach(el => {
+                addElement(el, 'button');
+            });
 
-                // Useful for navigation decisions
-                if (tag === 'a') {
-                    item.href = el.href;
-                }
+            /*
+            * 2. Native dropdowns
+            *
+            * Only visible <select> elements are exposed.
+            * Hidden/transparent backing selects for custom dropdowns
+            * are ignored.
+            */
+            document.querySelectorAll('select').forEach(el => {
+                if (!isVisible(el)) return;
 
-                // Useful for search/filter decisions
-                if (tag === 'input') {
-
-                    item.placeholder = el.placeholder || '';
-                    item.value = el.value || '';
-
-                    if (
-                        el.type === 'checkbox' ||
-                        el.type === 'radio'
-                    ) {
-                        item.checked = !!el.checked;
-                    }
-                }
-
-                // Only visible native <select> elements reach this point.
-                // Custom/hidden selects were filtered out by isVisible().
-                if (tag === 'select') {
-
-                    item.value = el.value || '';
-
-                    item.options = Array.from(el.options)
+                addElement(el, 'dropdown', {
+                    options: Array.from(el.options)
                         .slice(0, 30)
                         .map(option => ({
-                            text: option.text.trim(),
+                            name: option.text.trim(),
                             value: option.value,
                             selected: option.selected
-                        }));
-                }
+                        }))
+                });
+            });
 
-                // Useful for custom dropdowns / expandable controls
+            /*
+            * 3. Checkboxes
+            */
+            document.querySelectorAll(
+                'input[type="checkbox"], [role="checkbox"]'
+            ).forEach(el => {
                 if (
-                    tag === 'button' ||
-                    el.getAttribute('role') === 'button' ||
-                    el.getAttribute('role') === 'combobox'
+                    el.tagName === 'INPUT' &&
+                    isBlockedInput(el)
                 ) {
-                    const expanded = el.getAttribute('aria-expanded');
-
-                    if (expanded !== null) {
-                        item.expanded = expanded === 'true';
-                    }
+                    return;
                 }
 
-                interactive.push(item);
+                addElement(el, 'checkbox', {
+                    checked: !!el.checked
+                });
+            });
 
-                idCounter++;
+            /*
+            * 4. Radio buttons
+            */
+            document.querySelectorAll(
+                'input[type="radio"], [role="radio"]'
+            ).forEach(el => {
+                addElement(el, 'radio', {
+                    checked: !!el.checked
+                });
+            });
+
+            /*
+            * 5. Text inputs
+            *
+            * Only inputs intended for textual entry are exposed.
+            */
+            document.querySelectorAll(
+                'input, textarea'
+            ).forEach(el => {
+
+                const tag = el.tagName.toLowerCase();
+                const inputType = (el.type || 'text').toLowerCase();
+
+                const isTextInput =
+                    tag === 'textarea' ||
+                    [
+                        'text',
+                        'search',
+                        'email',
+                        'tel',
+                        'url'
+                    ].includes(inputType);
+
+                if (!isTextInput) return;
+
+                // Do not expose cookie/privacy/newsletter inputs.
+                if (tag === 'input' && isBlockedInput(el)) {
+                    return;
+                }
+
+                addElement(el, 'text_input', {
+                    value: el.value || '',
+                    placeholder: el.placeholder || ''
+                });
+            });
+
+            /*
+            * 6. Links
+            */
+            document.querySelectorAll('a').forEach(el => {
+                if (!el.href) return;
+
+                addElement(el, 'link', {
+                    href: el.href
+                });
             });
 
             return {
@@ -235,160 +306,77 @@ async def run_agent(target_url, keywords, location):
     @tool
     async def interact(
         state_version: int,
-        agent_id: int,
+        state_id: int,
         action: str,
         value: str = ""
     ) -> str:
         """
-        Interacts with an element.
+        Interact with an element from the current page state.
 
-        - state_version: version of the state returned by get_page_state.
-        - agent_id: exact integer ID from get_page_state.
-        - action: 'click', 'fill', 'check', or 'select'.
-        - value: text to type or option to select.
+        state_id is only valid for the specified state_version.
+        Actions:
+        - click
+        - fill
+        - check
+        - select
         """
 
-        # Prevent using element IDs from an old page state.
+        # Reject stale state.
         if state_version != globals()["state_version"]:
             return json.dumps({
                 "success": False,
                 "error": "STALE_STATE",
                 "message": (
-                    f"Element IDs belong to state {state_version}, "
-                    f"but the current state is "
-                    f"{globals()['state_version']}. "
-                    "Call get_page_state before interacting."
+                    f"State {state_version} is stale. "
+                    f"Current state is {globals()['state_version']}. "
+                    "Call get_page_state first."
                 )
             })
 
         locator = page.locator(
-            f"[agent-id='{agent_id}']"
+            f"[state-id='{state_id}']"
         ).first
 
         try:
-            # Make sure the element still exists.
             if await locator.count() == 0:
                 return json.dumps({
                     "success": False,
                     "error": "ELEMENT_NOT_FOUND",
                     "message": (
-                        f"Element {agent_id} was not found. "
+                        f"State ID {state_id} was not found. "
                         "Call get_page_state again."
                     )
                 })
 
-            # Extract the target text for logging.
-            element_text = await locator.evaluate(
-                """
-                (el) =>
-                    el.innerText ||
-                    el.placeholder ||
-                    el.value ||
-                    el.getAttribute('aria-label') ||
-                    'No Text'
-                """
-            )
-
-            element_text = (
-                element_text
-                .strip()
-                [:100]
-                .replace('\n', ' ')
-            )
-
-            print(
-                f"\n[*] ACTION: {action.upper()} "
-                f"| ID: {agent_id} "
-                f"| TARGET: '{element_text}' "
-                f"| INPUT: '{value}'"
-            )
-
             prev_url = page.url
 
-            # --------------------------------------------------
-            # CLICK
-            # --------------------------------------------------
-
             if action == "click":
-
                 await locator.click()
 
-            # --------------------------------------------------
-            # FILL
-            # --------------------------------------------------
-
             elif action == "fill":
-
                 await locator.fill(value)
                 await locator.press("Enter")
 
-            # --------------------------------------------------
-            # CHECK
-            # --------------------------------------------------
-
             elif action == "check":
-
                 await locator.check()
 
-            # --------------------------------------------------
-            # SELECT
-            # --------------------------------------------------
-
             elif action == "select":
-
-                tag_name = await locator.evaluate(
+                if await locator.evaluate(
                     "(el) => el.tagName.toLowerCase()"
-                )
-
-                if tag_name != "select":
+                ) != "select":
                     return json.dumps({
                         "success": False,
                         "error": "NOT_NATIVE_SELECT",
                         "message": (
-                            "This is not a native select. "
-                            "Click the visible dropdown, call "
-                            "get_page_state, then click the desired option."
-                        )
-                    })
-
-                is_visible = await locator.is_visible()
-
-                if not is_visible:
-                    return json.dumps({
-                        "success": False,
-                        "error": "HIDDEN_SELECT",
-                        "message": (
-                            "This select is hidden and is likely the backing "
-                            "element for a custom dropdown. Do not use select. "
-                            "Click the visible dropdown, call get_page_state, "
-                            f"then click '{value}'."
-                        )
-                    })
-
-                options = await locator.locator(
-                    "option"
-                ).all_text_contents()
-
-                options = [option.strip() for option in options]
-
-                if value not in options:
-                    return json.dumps({
-                        "success": False,
-                        "error": "OPTION_NOT_FOUND",
-                        "message": (
-                            f"Option '{value}' was not found. "
-                            f"Available options: {options}"
+                            "Only native dropdowns support 'select'. "
+                            "For a custom dropdown, click it, then "
+                            "call get_page_state and click the option."
                         )
                     })
 
                 await locator.select_option(label=value)
 
-            # --------------------------------------------------
-            # INVALID ACTION
-            # --------------------------------------------------
-
             else:
-
                 return json.dumps({
                     "success": False,
                     "error": "INVALID_ACTION",
@@ -398,55 +386,33 @@ async def run_agent(target_url, keywords, location):
                     )
                 })
 
-            # Wait briefly for navigation/dynamic updates.
-            await page.wait_for_timeout(3000)
-
-            # --------------------------------------------------
-            # FEEDBACK
-            # --------------------------------------------------
-
             current_url = page.url
 
-            feedback = {
+            return json.dumps({
                 "success": True,
+                "state_id": state_id,
                 "action": action,
-                "agent_id": agent_id,
-                "message": (
-                    f"Action '{action}' executed successfully "
-                    f"on element {agent_id}."
+                "navigation": (
+                    {
+                        "from": prev_url,
+                        "to": current_url
+                    }
+                    if current_url != prev_url
+                    else None
+                ),
+                "next_step": (
+                    "Call get_page_state before the next interaction."
                 )
-            }
-
-            if current_url != prev_url:
-                feedback["navigation"] = {
-                    "from": prev_url,
-                    "to": current_url
-                }
-            else:
-                feedback["navigation"] = None
-                feedback["message"] += (
-                    " The URL did not change, but the page content "
-                    "may have updated dynamically."
-                )
-
-            feedback["next_step"] = (
-                "Call get_page_state before the next interaction."
-            )
-
-            return json.dumps(feedback)
+            })
 
         except Exception as e:
-
-            error_msg = (
-                f"Failed to perform {action} on {agent_id}: {str(e)}"
-            )
-
-            print(f"[!] {error_msg}")
-
             return json.dumps({
                 "success": False,
                 "error": "INTERACTION_FAILED",
-                "message": error_msg,
+                "message": (
+                    f"Failed to perform '{action}' "
+                    f"on state_id {state_id}: {str(e)}"
+                ),
                 "next_step": (
                     "Call get_page_state and reassess the page."
                 )
@@ -576,8 +542,8 @@ async def run_agent(target_url, keywords, location):
 
 if __name__ == "__main__":
     # target_url = "https://www.coolblue.nl/en/vacancies"
-    target_url = "https://www.leaseweb.com/en/about-us/career"
-    # target_url = "https://catawiki.careers/vacancies"
+    # target_url = "https://www.leaseweb.com/en/about-us/career"
+    target_url = "https://catawiki.careers/vacancies"
     keywords = "Backend Software Engineering"
     location = "Europe"
     asyncio.run(run_agent(target_url, keywords, location))
