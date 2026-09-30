@@ -370,7 +370,7 @@ async def run_agent(target_url, keywords, location):
         )
 
         try:
-            if await locator.count() == 0:
+            if await locator.count() == 0 or not await locator.is_visible():
                 return json.dumps({
                     "success": False,
                     "error": "ELEMENT_NOT_FOUND",
@@ -383,14 +383,14 @@ async def run_agent(target_url, keywords, location):
             prev_url = page.url
 
             if action == "click":
-                await locator.click()
+                await locator.click(timeout=3000)
 
             elif action == "fill":
-                await locator.fill(value)
+                await locator.fill(value, timeout=3000)
                 await locator.press("Enter")
 
             elif action == "check":
-                await locator.check()
+                await locator.check(timeout=3000)
 
             elif action == "select":
                 if await locator.evaluate(
@@ -406,7 +406,7 @@ async def run_agent(target_url, keywords, location):
                         )
                     })
 
-                await locator.select_option(label=value)
+                await locator.select_option(label=value, timeout=3000)
 
             else:
                 return json.dumps({
@@ -433,11 +433,12 @@ async def run_agent(target_url, keywords, location):
                     else None
                 ),
                 "next_step": (
-                    "Call get_page_state before the next interaction."
+                    "Call get_page_state before the next call to interact."
                 )
             })
 
         except Exception as e:
+            print(f"Error in interact: {str(e)} \n")
             return json.dumps({
                 "success": False,
                 "error": "INTERACTION_FAILED",
@@ -516,12 +517,12 @@ async def run_agent(target_url, keywords, location):
         2. Remove consent forms, cookie banners, modals, and other blockers in each step.
         3. Only navigate career/job pages. Ignore generic sites, product, blog, documentation, or unrelated search pages.
         4. Prefer, in order:
-            a) relevant career filters,
-            b) links to job-search/vacancy pages,
-            c) clearly career-specific search inputs.
+            a) job opening/career related filters, such as drop downs, check boxes, radio buttons, buttons, etc.
+            b) links to job-search/vacancies/current openings pages,
+            c) career-specific search inputs.
             - Only enter search text on searchable text fields, not anything else. Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
             - Only fill inputs whose label, placeholder, name, or surrounding context
-        5. After EVERY `interact`, call `get_page_state` again. Never assume an action succeeded.
+        5. After EVERY `interact`, call `get_page_state` again. Do NOT call `interact` more than once in a row.
         6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
         7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
         8. Once matching vacancies are found, call `extract_and_print_urls`.
