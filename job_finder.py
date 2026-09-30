@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key"
 state_version = 0
+state_valid = True 
 
 class ExtractedJobs(BaseModel):
     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
@@ -44,9 +45,10 @@ async def run_agent(target_url, keywords, location):
         Always call this before interacting with the page.
         """
 
-        global state_version
+        global state_version, state_valid
 
         state_version += 1
+        state_valid = True
 
         print(
             f"\n[*] Retrieving page state "
@@ -320,9 +322,10 @@ async def run_agent(target_url, keywords, location):
         - check
         - select
         """
+        global state_valid
 
         # Reject stale state.
-        if state_version != globals()["state_version"]:
+        if state_version != globals()["state_version"] or not state_valid:
             return json.dumps({
                 "success": False,
                 "error": "STALE_STATE",
@@ -419,6 +422,7 @@ async def run_agent(target_url, keywords, location):
                 })
 
             current_url = page.url
+            state_valid = False
 
             return json.dumps({
                 "success": True,
