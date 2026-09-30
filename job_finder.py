@@ -337,6 +337,38 @@ async def run_agent(target_url, keywords, location):
             f"[state-id='{state_id}']"
         ).first
 
+        target = await locator.evaluate("""
+        (el) => {
+            const label = el.id
+                ? document.querySelector(
+                    `label[for="${CSS.escape(el.id)}"]`
+                )
+                : null;
+
+            return (
+                label?.innerText ||
+                el.closest('label')?.innerText ||
+                el.getAttribute('aria-label') ||
+                el.getAttribute('title') ||
+                el.placeholder ||
+                el.innerText ||
+                el.value ||
+                ''
+            )
+            .replace(/\\s+/g, ' ')
+            .trim()
+            .substring(0, 120);
+        }
+        """)
+
+        print(
+            f"\n[*] Interacting "
+            f"| state={state_version}:{state_id} "
+            f"| action={action.upper()} "
+            f"| target='{target}' "
+            f"| value='{value}'"
+        )
+
         try:
             if await locator.count() == 0:
                 return json.dumps({
@@ -542,8 +574,8 @@ async def run_agent(target_url, keywords, location):
 
 if __name__ == "__main__":
     # target_url = "https://www.coolblue.nl/en/vacancies"
-    # target_url = "https://www.leaseweb.com/en/about-us/career"
-    target_url = "https://catawiki.careers/vacancies"
+    target_url = "https://www.leaseweb.com/en/about-us/career"
+    # target_url = "https://catawiki.careers/vacancies"
     keywords = "Backend Software Engineering"
     location = "Europe"
     asyncio.run(run_agent(target_url, keywords, location))
