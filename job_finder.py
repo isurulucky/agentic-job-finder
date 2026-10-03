@@ -331,8 +331,10 @@ async def run_agent(target_url, keywords, location):
                 "error": "STALE_STATE",
                 "message": (
                     f"State {state_version} is stale. "
-                    f"Current state is {globals()['state_version']}. "
-                    "Call get_page_state first."
+                    f"Current state is {globals()['state_version']}."
+                ),
+                "next_step": (
+                    "get_page_state"
                 )
             })
 
@@ -378,8 +380,10 @@ async def run_agent(target_url, keywords, location):
                     "success": False,
                     "error": "ELEMENT_NOT_FOUND",
                     "message": (
-                        f"State ID {state_id} was not found. "
-                        "Call get_page_state again."
+                        f"State ID {state_id} was not found."
+                    ),
+                    "next_step": (
+                        "get_page_state"
                     )
                 })
 
@@ -404,8 +408,9 @@ async def run_agent(target_url, keywords, location):
                         "error": "NOT_NATIVE_SELECT",
                         "message": (
                             "Only native dropdowns support 'select'. "
-                            "For a custom dropdown, click it, then "
-                            "call get_page_state and click the option."
+                        ),           
+                        "next_step": (
+                            "get_page_state"
                         )
                     })
 
@@ -418,6 +423,9 @@ async def run_agent(target_url, keywords, location):
                     "message": (
                         f"Unknown action '{action}'. "
                         "Use click, fill, check, or select."
+                    ),
+                    "next_step": (
+                        "get_page_state"
                     )
                 })
 
@@ -437,7 +445,7 @@ async def run_agent(target_url, keywords, location):
                     else None
                 ),
                 "next_step": (
-                    "Call get_page_state before the next call to interact."
+                    "get_page_state"
                 )
             })
 
@@ -451,14 +459,14 @@ async def run_agent(target_url, keywords, location):
                     f"on state_id {state_id}: {str(e)}"
                 ),
                 "next_step": (
-                    "Call get_page_state and reassess the page."
+                    "get_page_state"
                 )
             })
 
     @tool
     async def extract_and_print_urls() -> str:
         """Extracts job URLs from the current page matching the user's keywords and prints them to the console."""
-        print("\n[*] Tool called: Extracting job links directly from DOM...")
+        print("\n[*] Extracting job links directly from DOM...")
         
         # Wait a moment for dynamic job cards to render in React/Vue
         await page.wait_for_timeout(2000)
@@ -579,8 +587,11 @@ async def run_agent(target_url, keywords, location):
 
 if __name__ == "__main__":
     # target_url = "https://www.coolblue.nl/en/vacancies"
-    target_url = "https://www.leaseweb.com/en/about-us/career"
+    # target_url = "https://www.leaseweb.com/en/about-us/career"
     # target_url = "https://catawiki.careers/vacancies"
-    keywords = "Backend Software Engineering"
+    # target_url = "https://careers.adyen.com/"
+    # target_url = "https://careers.bol.com/en/"
+    target_url = "https://www.personio.com/about-personio/careers/"
+    keywords = "Senior Software Engineer"
     location = "Europe"
     asyncio.run(run_agent(target_url, keywords, location))
