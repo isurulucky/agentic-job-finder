@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from playwright.async_api import async_playwright
 from langchain_openai import ChatOpenAI
@@ -8,7 +9,7 @@ from tools import BrowserTools
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key"
 
-async def run_agent(target_url, keywords, location):    
+async def run_agent(target_url, keywords, location, language):    
     llm = ChatOpenAI(model="o4-mini", temperature=1)
     # llm = ChatOpenAI(model="gpt-5.4-nano", temperature=0)
 
@@ -41,8 +42,8 @@ async def run_agent(target_url, keywords, location):
             name="interact",
         ),
         StructuredTool.from_function(
-            coroutine=browser_tools.extract_and_print_urls,
-            name="extract_and_print_urls",
+            coroutine=browser_tools.extract_urls,
+            name="extract_urls",
         ),
     ]
     llm_with_tools = llm.bind_tools(tools)
@@ -54,8 +55,9 @@ async def run_agent(target_url, keywords, location):
         You are an autonomous web agent finding job vacancies matching:
         - Keywords: "{keywords}"
         - Location: "{location}"
+        - Language: "{language}"
 
-        Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat.
+        Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat. Use as minimum loop iterations as possible.
 
         Rules:
         1. ALWAYS call `get_page_state` before acting.
@@ -70,7 +72,7 @@ async def run_agent(target_url, keywords, location):
         5. After EVERY `interact`, call `get_page_state` again. Do NOT call `interact` more than once in a row.
         6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
         7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
-        8. Once matching vacancies are found, call `extract_and_print_urls`.
+        8. Once matching vacancies are found, call `extract_urls`.
         9. If no matching vacancies can be found after exhausting relevant paths,
         return no URLs rather than inventing them.
 
@@ -103,17 +105,24 @@ async def run_agent(target_url, keywords, location):
             tool_result = await chosen_tool.ainvoke(tool_args)
             
             # Append the result back to the conversation history
-            messages.append(ToolMessage(tool_call_id=tool_call["id"], content=str(tool_result)))
+            messages.append(
+                ToolMessage(
+                    tool_call_id=tool_call["id"], 
+                    content=json.dumps(tool_result)
+                )
+            )
             
             # Termination condition
-            if tool_name == "extract_and_print_urls":
-                print("[*] Extraction complete. Terminating loop.")
+            if tool_name == "extract_urls":
+                print("[*] Extraction complete. Printing and terminating loop.")
+                for url in tool_result:
+                    print(url)
                 await browser.close()
                 await playwright.stop()
                 return
 
             # Sleep 2 seconds
-            time.sleep(3)
+            time.sleep(2)
 
     print("[*] Loop limit reached or extraction finished.")
     await browser.close()
@@ -128,4 +137,5 @@ if __name__ == "__main__":
     # target_url = "https://www.personio.com/about-personio/careers/"
     keywords = "Software Engineer"
     location = "Europe"
-    asyncio.run(run_agent(target_url, keywords, location))
+    language = "English"
+    asyncio.run(run_agent(target_url, keywords, location, language))

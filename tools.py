@@ -14,41 +14,41 @@ class BrowserTools:
         self.keywords = keywords
         self.state_valid = False
 
-    async def get_page_state(self) -> str:
+    async def get_page_state(self) -> dict:
         """Retrieves the current page state and assigns versioned element state IDs.
 
         Increments `self.state_version` and evaluates page state in the browser context,
         annotating visible interactive elements with a `state-id` DOM attribute.
 
         Returns:
-        str: A JSON-encoded string matching the following schema structure.
-        Element `state_id`s are only valid for the returned `state_version`.
+        dict: A dictionary with the following structure:
 
         ```
             {
-            "state_version": 1,
-            "url": "https://example.com/page",
-            "title": "Page Title",
-            "elements": [
-                {
-                "state_id": 1,
-                "type": "button" | "dropdown" | "checkbox" | "radio" | "text_input" | "link",
-                "name": "Submit",
-                "disabled": false,
-                "href": "https://example.com/link",
-                "value": "",
-                "placeholder": "Enter email...",
-                "checked": false,
-                "options": [
+                "state_version": 1,
+                "url": "https://example.com/page",
+                "title": "Page Title",
+                "elements": [
                     {
-                    "name": "Option Label",
-                    "value": "opt_val",
-                    "selected": true
+                    "state_id": 1,
+                    "type": "button" | "dropdown" | "checkbox" | "radio" | "text_input" | "link",
+                    "name": "Submit",
+                    "disabled": false,
+                    "href": "https://example.com/link",
+                    "value": "",
+                    "placeholder": "Enter email...",
+                    "checked": false,
+                    "options": [
+                        {
+                        "name": "Option Label",
+                        "value": "opt_val",
+                        "selected": true
+                        }
+                    ]
                     }
                 ]
-                }
-            ]
             }
+            Element `state_id`s are only valid for the returned `state_version`.
 
             Type-specific properties:
             - `href`: present for links.
@@ -315,7 +315,7 @@ class BrowserTools:
             **state
         }
 
-        return json.dumps(result, indent=2)
+        return result
 
     async def interact(
         self,
@@ -323,31 +323,58 @@ class BrowserTools:
         state_id: int,
         action: str,
         value: str = ""
-    ) -> str:
+    ) -> dict:
         """
-        Interact with an element from the current page state.
+        Interacts with an element from the current page state.
 
-        state_id is only valid for the specified state_version.
-        Actions:
-        - click
-        - fill
-        - check
-        - select
+        `state_id` is only valid for the specified `state_version`.
+
+        Args:
+            state_version: Page state version associated with `state_id`.
+            state_id: ID of the element to interact with.
+            action: Action to perform: `click`, `fill`, `check`, or `select`.
+            value: Value used by `fill` or `select`.
+
+        Returns:
+            dict: A dictionary with the following structure:
+
+                {
+                    "success": true,
+                    "state_id": 1,
+                    "action": "click",
+                    "navigation": {
+                        "from": "https://example.com",
+                        "to": "https://example.com/next"
+                    },
+                    "error": null,
+                    "message": null,
+                    "next_step": "get_page_state"
+                }
+
+            On failure, `success` is false and `error`/`message` describe the
+            failure. Fields not applicable to the outcome are null.
+
+            Possible error codes include `STALE_STATE`, `ELEMENT_NOT_FOUND`,
+            `NOT_NATIVE_SELECT`, `INVALID_ACTION`, and `INTERACTION_FAILED`.
+
+            `next_step` instructs the agent which tool to call next and is
+            always `get_page_state`.
         """
 
         # Reject stale state.
         if state_version != self.state_version or not self.state_valid:
-            return json.dumps({
+            return {
                 "success": False,
+                "state_id": state_id,
+                "action": action,
+                "navigation": None,
                 "error": "STALE_STATE",
                 "message": (
                     f"State {state_version} is stale. "
                     f"Current state is {self.state_version}."
                 ),
-                "next_step": (
-                    "get_page_state"
-                )
-            })
+                "next_step": "get_page_state"
+            }
 
         locator = self.page.locator(
             f"[state-id='{state_id}']"
@@ -387,16 +414,17 @@ class BrowserTools:
 
         try:
             if await locator.count() == 0 or not await locator.is_visible():
-                return json.dumps({
+                return {
                     "success": False,
+                    "state_id": state_id,
+                    "action": action,
+                    "navigation": None,
                     "error": "ELEMENT_NOT_FOUND",
                     "message": (
                         f"State ID {state_id} was not found."
                     ),
-                    "next_step": (
-                        "get_page_state"
-                    )
-                })
+                    "next_step": "get_page_state"
+                }
 
             prev_url = self.page.url
 
@@ -414,36 +442,41 @@ class BrowserTools:
                 if await locator.evaluate(
                     "(el) => el.tagName.toLowerCase()"
                 ) != "select":
-                    return json.dumps({
+                    return {
                         "success": False,
+                        "state_id": state_id,
+                        "action": action,
+                        "navigation": None,
                         "error": "NOT_NATIVE_SELECT",
                         "message": (
-                            "Only native dropdowns support 'select'. "
-                        ),           
-                        "next_step": (
-                            "get_page_state"
-                        )
-                    })
+                            "Only native dropdowns support 'select'."
+                        ),
+                        "next_step": "get_page_state"
+                    }
 
-                await locator.select_option(label=value, timeout=3000)
+                await locator.select_option(
+                    label=value,
+                    timeout=3000
+                )
 
             else:
-                return json.dumps({
+                return {
                     "success": False,
+                    "state_id": state_id,
+                    "action": action,
+                    "navigation": None,
                     "error": "INVALID_ACTION",
                     "message": (
                         f"Unknown action '{action}'. "
                         "Use click, fill, check, or select."
                     ),
-                    "next_step": (
-                        "get_page_state"
-                    )
-                })
+                    "next_step": "get_page_state"
+                }
 
             current_url = self.page.url
             self.state_valid = False
 
-            return json.dumps({
+            return {
                 "success": True,
                 "state_id": state_id,
                 "action": action,
@@ -455,103 +488,105 @@ class BrowserTools:
                     if current_url != prev_url
                     else None
                 ),
-                "next_step": (
-                    "get_page_state"
-                )
-            })
+                "error": None,
+                "message": None,
+                "next_step": "get_page_state"
+            }
 
         except Exception as e:
             print(f"Error in interact: {str(e)} \n")
-            return json.dumps({
+
+            return {
                 "success": False,
+                "state_id": state_id,
+                "action": action,
+                "navigation": None,
                 "error": "INTERACTION_FAILED",
                 "message": (
                     f"Failed to perform '{action}' "
                     f"on state_id {state_id}: {str(e)}"
                 ),
-                "next_step": (
-                    "get_page_state"
-                )
-            })
+                "next_step": "get_page_state"
+            }
         
-    async def extract_urls(self) -> list[str]:
-        """Extract and return vacancy URLs currently visible on the page."""
-
-        print("\n[*] Extracting job links directly from DOM...")
-
-        await self.page.wait_for_timeout(2000)
-
-        js_extract = """
-        () => {
-            const links = Array.from(document.querySelectorAll('a[href]'));
-
-            return links
-                .map(a => ({
-                    text: (a.innerText || a.getAttribute('aria-label') || '')
-                        .trim()
-                        .replace(/\\s+/g, ' '),
-                    href: a.href
-                }))
-                .filter(item =>
-                    item.text.length > 0 &&
-                    item.href.startsWith('http')
-                );
-        }
-        """
-
-        raw_links = await self.page.evaluate(js_extract)
-
-        # Deduplicate by URL
-        unique_links = {}
-        for link in raw_links:
-            unique_links[link["href"]] = link["text"]
-
-        urls = list(unique_links.keys())
-
-        return urls
-
     # async def extract_urls(self) -> list[str]:
-    #     """Extracts job URLs from the current page matching the user's keywords and prints them to the console."""
+    #     """Extract and return vacancy URLs currently visible on the page."""
+
     #     print("\n[*] Extracting job links directly from DOM...")
-        
-    #     # Wait a moment for dynamic job cards to render in React/Vue
+
     #     await self.page.wait_for_timeout(2000)
-        
-    #     # Extract all visible links with their inner text and full absolute hrefs
+
     #     js_extract = """
     #     () => {
     #         const links = Array.from(document.querySelectorAll('a[href]'));
+
     #         return links
     #             .map(a => ({
-    #                 text: (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
-    #                 href: a.href // Absolute URL
+    #                 text: (a.innerText || a.getAttribute('aria-label') || '')
+    #                     .trim()
+    #                     .replace(/\\s+/g, ' '),
+    #                 href: a.href
     #             }))
-    #             .filter(item => item.text.length > 0 && item.href.startsWith('http'));
+    #             .filter(item =>
+    #                 item.text.length > 0 &&
+    #                 item.href.startsWith('http')
+    #             );
     #     }
     #     """
+
     #     raw_links = await self.page.evaluate(js_extract)
+
+    #     # Deduplicate by URL
+    #     unique_links = {}
+    #     for link in raw_links:
+    #         unique_links[link["href"]] = link["text"]
+
+    #     urls = list(unique_links.keys())
+
+    #     return urls
+
+    async def extract_urls(self) -> list[str]:
+        """Extracts job URLs from the current page matching the user's keywords and prints them to the console."""
+        print("\n[*] Extracting job links directly from DOM...")
         
-    #     # Deduplicate links
-    #     unique_links = {link['href']: link['text'] for link in raw_links}
-    #     formatted_links = [f"Text: '{text}' | URL: {href}" for href, text in unique_links.items()]
+        # Wait a moment for dynamic job cards to render in React/Vue
+        await self.page.wait_for_timeout(2000)
         
-    #     # Truncate string representation if page has hundreds of nav links
-    #     links_text = "\n".join(formatted_links[:150]) 
+        # Extract all visible links with their inner text and full absolute hrefs
+        js_extract = """
+        () => {
+            const links = Array.from(document.querySelectorAll('a[href]'));
+            return links
+                .map(a => ({
+                    text: (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
+                    href: a.href // Absolute URL
+                }))
+                .filter(item => item.text.length > 0 && item.href.startsWith('http'));
+        }
+        """
+        raw_links = await self.page.evaluate(js_extract)
         
-    #     # Ask LLM to pick ONLY job vacancy URLs from the clean list
-    #     extract_prompt = f"""
-    #     Given this list of links on a career page, extract ONLY the URLs that correspond to specific job vacancies matching keywords: '{self.keywords}'.
-    #     Ignore generic navigation links (like 'About Us', 'Privacy', 'Categories').
+        # Deduplicate links
+        unique_links = {link['href']: link['text'] for link in raw_links}
+        formatted_links = [f"Text: '{text}' | URL: {href}" for href, text in unique_links.items()]
         
-    #     Links:
-    #     {links_text}
-    #     """
+        # Truncate string representation if page has hundreds of nav links
+        links_text = "\n".join(formatted_links[:150]) 
         
-    #     extractor = self.llm.with_structured_output(ExtractedJobs)
-    #     result = extractor.invoke(extract_prompt)
+        # Ask LLM to pick ONLY job vacancy URLs from the clean list
+        extract_prompt = f"""
+        Given this list of links on a career page, extract ONLY the URLs that correspond to specific job vacancies matching keywords: '{self.keywords}'.
+        Ignore generic navigation links (like 'About Us', 'Privacy', 'Categories').
         
-    #     # print("\n=== FINAL EXTRACTED JOB URLS ===")
-    #     # for url in result.job_urls:
-    #     #     print(url)
+        Links:
+        {links_text}
+        """
+        
+        extractor = self.llm.with_structured_output(ExtractedJobs)
+        result = extractor.invoke(extract_prompt)
+        
+        # print("\n=== FINAL EXTRACTED JOB URLS ===")
+        # for url in result.job_urls:
+        #     print(url)
             
-    #     return result.job_urls
+        return result.job_urls
