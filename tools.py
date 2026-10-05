@@ -510,7 +510,11 @@ class BrowserTools:
             }
         
     # async def extract_urls(self) -> list[str]:
-    #     """Extract and return vacancy URLs currently visible on the page."""
+    #     """Extracts and returns unique HTTP(S) URLs from links currently visible on the page.
+
+    #     Returns:
+    #     list[str]: Unique URLs found in visible link elements on the current page.
+    #     """
 
     #     print("\n[*] Extracting job links directly from DOM...")
 
@@ -545,8 +549,21 @@ class BrowserTools:
 
     #     return urls
 
+    async def print_urls(self, urls: list[str]) -> None:
+        """ Prints the given URLs to the console. 
+
+            Args:
+                urls: list of URLs to be printed to the console.
+        """
+        for url in urls:
+            print(url)
+
     async def extract_urls(self) -> list[str]:
-        """Extracts job URLs from the current page matching the user's keywords and prints them to the console."""
+        """Extracts job related URLs from the current page matching the user's keywords and prints them to the console.
+        
+        Returns:
+            list[str]: Unique job related URLs found in the current page.
+        """
         print("\n[*] Extracting job links directly from DOM...")
         
         # Wait a moment for dynamic job cards to render in React/Vue

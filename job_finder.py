@@ -45,6 +45,10 @@ async def run_agent(target_url, keywords, location, language):
             coroutine=browser_tools.extract_urls,
             name="extract_urls",
         ),
+        # StructuredTool.from_function(
+        #     coroutine=browser_tools.print_urls,
+        #     name="print_urls"
+        # ),
     ]
     llm_with_tools = llm.bind_tools(tools)
     tools_map = {t.name: t for t in tools}
@@ -57,7 +61,7 @@ async def run_agent(target_url, keywords, location, language):
         - Location: "{location}"
         - Language: "{language}"
 
-        Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat. Use as minimum loop iterations as possible.
+        Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat. Use as minimum loop iterations as possible. At every step, choose the single next action that makes the most progress toward finding matching vacancies.
 
         Rules:
         1. ALWAYS call `get_page_state` before acting.
@@ -72,13 +76,12 @@ async def run_agent(target_url, keywords, location, language):
         5. After EVERY `interact`, call `get_page_state` again. Do NOT call `interact` more than once in a row.
         6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
         7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
-        8. Once matching vacancies are found, call `extract_urls`.
-        9. If no matching vacancies can be found after exhausting relevant paths,
-        return no URLs rather than inventing them.
+        8. Once matching vacancies are found, call `extract_urls` and terminate.
+        9. If no matching vacancies can be found after exhausting relevant paths, return no URLs rather than inventing them.
 
-        At every step, choose the single next action that makes the most progress
-        toward finding matching vacancies.
-        """),
+        At every step, choose the single next action that makes the most progress toward finding matching vacancies.        
+        """
+        ),
 
         HumanMessage(content="Begin by observing the page state.")
     ]
