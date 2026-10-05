@@ -5,6 +5,8 @@ Agentic app capable of navigating career portals to find suitable opportunities 
 TODOs:
 -----
 
-Improve tools.py so that llm and keywords don't need to be passed. For this extract and print URLS needs to change.
-Check further improvements to get_page_state and interact, they are not perfect yet.
+1. Check why only one URL is printed in the CB s.e. vacancy search. 
+1.1 Multi agents? - for 1. browser navigation and 2.url extraction
+
+2. Check further improvements to get_page_state and interact, they are not perfect yet.
 Self-improvements to the agent
