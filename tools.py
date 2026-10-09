@@ -3,8 +3,8 @@ from pydantic import BaseModel, Field
 from playwright.async_api import Page
 from langchain_openai import ChatOpenAI
 
-class ExtractedJobs(BaseModel):
-    job_urls: list[str] = Field(description="List of matching job vacancy URLs")
+# class ExtractedJobs(BaseModel):
+#     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
 
 class BrowserTools:
     def __init__(self, page: Page, llm: ChatOpenAI, keywords: str):
@@ -549,61 +549,148 @@ class BrowserTools:
 
     #     return urls
 
-    async def print_urls(self, urls: list[str]) -> None:
-        """ Prints the given URLs to the console. 
+    # async def print_urls(self, urls: list[str]) -> None:
+    #     """ Prints the given URLs to the console. 
 
-            Args:
-                urls: list of URLs to be printed to the console.
-        """
-        for url in urls:
-            print(url)
+    #         Args:
+    #             urls: list of URLs to be printed to the console.
+    #     """
+    #     for url in urls:
+    #         print(url)
 
-    async def extract_urls(self) -> list[str]:
-        """Extracts job related URLs from the current page matching the user's keywords and prints them to the console.
+    # async def extract_urls(self) -> list[str]:
+    #     """Extracts job related URLs from the current page matching the user's keywords and prints them to the console.
         
-        Returns:
-            list[str]: Unique job related URLs found in the current page.
+    #     Returns:
+    #         list[str]: Unique job related URLs found in the current page.
+    #     """
+    #     print("\n[*] Extracting job links directly from DOM...")
+        
+    #     # Wait a moment for dynamic job cards to render in React/Vue
+    #     await self.page.wait_for_timeout(2000)
+        
+    #     # Extract all visible links with their inner text and full absolute hrefs
+    #     js_extract = """
+    #     () => {
+    #         const links = Array.from(document.querySelectorAll('a[href]'));
+    #         return links
+    #             .map(a => ({
+    #                 text: (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
+    #                 href: a.href // Absolute URL
+    #             }))
+    #             .filter(item => item.text.length > 0 && item.href.startsWith('http'));
+    #     }
+    #     """
+    #     raw_links = await self.page.evaluate(js_extract)
+        
+    #     # Deduplicate links
+    #     unique_links = {link['href']: link['text'] for link in raw_links}
+    #     formatted_links = [f"Text: '{text}' | URL: {href}" for href, text in unique_links.items()]
+        
+    #     # Truncate string representation if page has hundreds of nav links
+    #     links_text = "\n".join(formatted_links[:300]) 
+        
+    #     # Ask LLM to pick ONLY job vacancy URLs from the clean list
+    #     extract_prompt = f"""
+    #     Given the current page {self.page}, extract ONLY the URLs that correspond to specific job vacancie which semantically match the keywords: '{self.keywords}'.
+    #     Ignore any other links contained.
+        
+    #     Links:
+    #     {links_text}
+    #     """
+        
+    #     extractor = self.llm.with_structured_output(ExtractedJobs)
+    #     result = extractor.invoke(extract_prompt)
+        
+    #     # print("\n=== FINAL EXTRACTED JOB URLS ===")
+    #     # for url in result.job_urls:
+    #     #     print(url)
+            
+    #     return result.job_urls
+    
+
+    async def extract_urls(self) -> dict[str, str]:
+        """Extract all visible links from the current page with their text and URL.
+        
+            Returns:
+                dict[str, str]: dictionary with with their URL (key) and visible text (value).
         """
-        print("\n[*] Extracting job links directly from DOM...")
-        
-        # Wait a moment for dynamic job cards to render in React/Vue
-        await self.page.wait_for_timeout(2000)
-        
-        # Extract all visible links with their inner text and full absolute hrefs
+
+        print("\n[*] Extracting links directly from DOM...")
+
+        await self.page.wait_for_timeout(3000)
+
         js_extract = """
         () => {
             const links = Array.from(document.querySelectorAll('a[href]'));
+
             return links
                 .map(a => ({
-                    text: (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
-                    href: a.href // Absolute URL
+                    text: (a.innerText || a.getAttribute('aria-label') || '')
+                        .trim()
+                        .replace(/\\s+/g, ' '),
+                    href: a.href
                 }))
-                .filter(item => item.text.length > 0 && item.href.startsWith('http'));
+                .filter(item =>
+                    item.text.length > 0 &&
+                    item.href.startsWith('http')
+                );
         }
         """
+
         raw_links = await self.page.evaluate(js_extract)
+
+        # Deduplicate by URL
+        unique_links = {}
+        for link in raw_links:
+            unique_links[link["href"]] = link["text"]
+
+        links = {url: text for url, text in unique_links.items()}
         
-        # Deduplicate links
-        unique_links = {link['href']: link['text'] for link in raw_links}
-        formatted_links = [f"Text: '{text}' | URL: {href}" for href, text in unique_links.items()]
-        
-        # Truncate string representation if page has hundreds of nav links
-        links_text = "\n".join(formatted_links[:150]) 
+        print(f"[*] Extracted {len(links)} links.")
+
+        return links
+
+class JobLink(BaseModel):
+    url: str = Field(description="The full URL of the job vacancy.")
+    text: str = Field(description="The visible anchor text or title of the vacancy link.")
+
+class MatchingVacancies(BaseModel):
+    job_links: list[JobLink] = Field(
+        description="List of matching job vacancy URLs and their visible text values."
+    )
+
+async def list_matching_vacancies(extractedUrls: list[JobLink], llm: ChatOpenAI, keywords: str) -> list[JobLink]:
+        """Identifies job vacancy URLs matching the specified keywords.
+
+            Args:
+            extractedUrls: Mapping of URLs to their visible link text.
+            llm: Language model used to identify semantically matching vacancies.
+            keywords: Keywords describing the desired vacancies.
+
+            Returns:
+            list[job_links]: List of JobLink instnaes corresponding to specific job vacancies that
+            semantically match the keywords, with their visible link text.
+            Returns an empty list if no matching vacancies are found.
+        """
+
+        if len(extractedUrls) == 0:
+            # No URLs passed
+            print("Zero extracted URLs, no matching vacancies")
+            return extractedUrls
         
         # Ask LLM to pick ONLY job vacancy URLs from the clean list
         extract_prompt = f"""
-        Given this list of links on a career page, extract ONLY the URLs that correspond to specific job vacancies matching keywords: '{self.keywords}'.
-        Ignore generic navigation links (like 'About Us', 'Privacy', 'Categories').
+        Given the current page dictionary {extractedUrls} of url and visible text, extract ONLY the URLs that correspond to specific job vacancie which semantically match the keywords: '{keywords}'.
+        If no matching vacancies can be found after exhausting relevant paths, return no URLs rather than inventing them.
         
         Links:
-        {links_text}
+        {extractedUrls}
         """
         
-        extractor = self.llm.with_structured_output(ExtractedJobs)
+        extractor = llm.with_structured_output(
+            MatchingVacancies,
+            # method="function_calling",
+        )        
         result = extractor.invoke(extract_prompt)
-        
-        # print("\n=== FINAL EXTRACTED JOB URLS ===")
-        # for url in result.job_urls:
-        #     print(url)
-            
-        return result.job_urls
+        return result.job_links

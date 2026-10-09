@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import StructuredTool, tool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
-from tools import BrowserTools
+from tools import BrowserTools, JobLink, list_matching_vacancies
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key"
 
@@ -32,6 +32,25 @@ async def run_agent(target_url, keywords, location, language):
     browser_tools = BrowserTools(page, llm, keywords)
 
     # Bind tools to the LLM
+
+    async def list_matching_vacancies_tool(extractedUrls: list[JobLink]) -> list[JobLink]:
+        """Identifies job vacancies matching the specified keywords.
+
+        Args:
+            extractedUrls: List of JobLink instances containing vacancy URLs
+                and their visible link text.
+
+        Returns:
+            list[JobLink]: JobLink instances corresponding to vacancies that
+                semantically match the keywords, or an empty list if no
+                matches are found.
+        """
+        return await list_matching_vacancies(
+            extractedUrls=extractedUrls,
+            llm=llm,
+            keywords=keywords,
+        )
+
     tools = [
         StructuredTool.from_function(
             coroutine=browser_tools.get_page_state,
@@ -44,6 +63,10 @@ async def run_agent(target_url, keywords, location, language):
         StructuredTool.from_function(
             coroutine=browser_tools.extract_urls,
             name="extract_urls",
+        ),
+        StructuredTool.from_function(
+            coroutine=list_matching_vacancies_tool,
+            name="list_matching_vacancies_tool",
         ),
         # StructuredTool.from_function(
         #     coroutine=browser_tools.print_urls,
@@ -76,8 +99,9 @@ async def run_agent(target_url, keywords, location, language):
         5. After EVERY `interact`, call `get_page_state` again. Do NOT call `interact` more than once in a row.
         6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
         7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
-        8. Once matching vacancies are found, call `extract_urls` and terminate.
-        9. If no matching vacancies can be found after exhausting relevant paths, return no URLs rather than inventing them.
+        8. Once filtering/searching is complete, call `extract_urls`. 
+        9. With the results returned from `extract_urls`, call `list_matching_vacancies` and terminate.
+        
 
         At every step, choose the single next action that makes the most progress toward finding matching vacancies.        
         """
@@ -116,8 +140,9 @@ async def run_agent(target_url, keywords, location, language):
             )
             
             # Termination condition
-            if tool_name == "extract_urls":
+            if tool_name == "list_matching_vacancies":
                 print("[*] Extraction complete. Printing and terminating loop.")
+                print(tool_result)
                 for url in tool_result:
                     print(url)
                 await browser.close()
