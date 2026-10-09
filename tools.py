@@ -681,17 +681,14 @@ async def list_matching_vacancies(extractedUrls: list[JobLink], llm: ChatOpenAI,
         
         # Ask LLM to pick ONLY job vacancy URLs from the clean list
         extract_prompt = f"""
-        Given the current page dictionary {extractedUrls} of url and visible text, extract ONLY the URLs that correspond to specific job vacancie which semantically match the keywords: '{keywords}'.
-        If no matching vacancies can be found after exhausting relevant paths, return no URLs rather than inventing them.
-        
-        Links:
-        {extractedUrls}
+        Given the list of `JobLink` instances {extractedUrls}, extract ONLY the `JobLink` instances that are relevant.
+        To decide whether a vacancy is relevant or not, consider `url` and 'text` elements and decode based on keyword and semantic matches for the criteria : '{keywords}'.
+        If no matching vacancies can be found after exhausting relevant paths, return zero `JobLink` instances. DO NOT invent/hallucinate vacancies.
         """
         
         extractor = llm.with_structured_output(
             MatchingVacancies,
             method="json_schema",
-            # method="function_calling",
         )        
         result = extractor.invoke(extract_prompt)
         return result.job_links
