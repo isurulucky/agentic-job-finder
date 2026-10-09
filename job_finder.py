@@ -5,6 +5,7 @@ from playwright.async_api import async_playwright
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import StructuredTool, tool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
+from pydantic import BaseModel
 from tools import BrowserTools, JobLink, list_matching_vacancies
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key"
@@ -34,16 +35,16 @@ async def run_agent(target_url, keywords, location, language):
     # Bind tools to the LLM
 
     async def list_matching_vacancies_tool(extractedUrls: list[JobLink]) -> list[JobLink]:
-        """Identifies job vacancies matching the specified keywords.
 
-        Args:
-            extractedUrls: List of JobLink instances containing vacancy URLs
-                and their visible link text.
+        """Identifies job vacancy URLs matching the specified keywords.
 
-        Returns:
-            list[JobLink]: JobLink instances corresponding to vacancies that
-                semantically match the keywords, or an empty list if no
-                matches are found.
+            Args:
+            extractedUrls: Mapping of URLs to their visible link text.
+
+            Returns:
+            list[JobLink]: List of JobLink instances corresponding to specific job vacancies that
+            semantically match the keywords, with their visible link text.
+            Returns an empty dictionary if no matching vacancies are found.
         """
         return await list_matching_vacancies(
             extractedUrls=extractedUrls,
@@ -110,6 +111,11 @@ async def run_agent(target_url, keywords, location, language):
         HumanMessage(content="Begin by observing the page state.")
     ]
 
+    def serialize_default(obj):
+        if isinstance(obj, BaseModel):
+            return obj.model_dump()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
     iterations = 15
     for iteration in range(0, iterations):
         print(f"\n--- Iteration {iteration+1}/{iterations} ---")
@@ -135,12 +141,12 @@ async def run_agent(target_url, keywords, location, language):
             messages.append(
                 ToolMessage(
                     tool_call_id=tool_call["id"], 
-                    content=json.dumps(tool_result)
+                    content=json.dumps(tool_result, default=serialize_default)
                 )
             )
             
             # Termination condition
-            if tool_name == "list_matching_vacancies":
+            if tool_name == "list_matching_vacancies_tool":
                 print("[*] Extraction complete. Printing and terminating loop.")
                 print(tool_result)
                 for url in tool_result:

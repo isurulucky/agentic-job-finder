@@ -664,12 +664,12 @@ async def list_matching_vacancies(extractedUrls: list[JobLink], llm: ChatOpenAI,
         """Identifies job vacancy URLs matching the specified keywords.
 
             Args:
-            extractedUrls: Mapping of URLs to their visible link text.
+            extractedUrls: List of JobLink instances for discovered URLs.
             llm: Language model used to identify semantically matching vacancies.
             keywords: Keywords describing the desired vacancies.
 
             Returns:
-            list[job_links]: List of JobLink instnaes corresponding to specific job vacancies that
+            list[job_links]: List of JobLink instances corresponding to specific job vacancies that
             semantically match the keywords, with their visible link text.
             Returns an empty list if no matching vacancies are found.
         """
@@ -690,6 +690,7 @@ async def list_matching_vacancies(extractedUrls: list[JobLink], llm: ChatOpenAI,
         
         extractor = llm.with_structured_output(
             MatchingVacancies,
+            method="json_schema",
             # method="function_calling",
         )        
         result = extractor.invoke(extract_prompt)
