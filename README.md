@@ -5,8 +5,9 @@ Agentic app capable of navigating career portals to find suitable opportunities 
 TODOs:
 -----
 
-1. Check why only one URL is printed in the CB s.e. vacancy search. 
-1.1 Multi agents? - for 1. browser navigation and 2.url extraction
 
-2. Check further improvements to get_page_state and interact, they are not perfect yet.
-Self-improvements to the agent
+1. Refactoring and clean-up
+
+2. Support local caching for sites successfully navigated?
+
+3. Include self-learning capabilities for agents
