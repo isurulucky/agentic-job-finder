@@ -47,7 +47,7 @@ async def run_agent(target_url, keywords, location, language):
             Returns an empty dictionary if no matching vacancies are found.
         """
         return await list_matching_vacancies(
-            extractedUrls=extractedUrls,
+            jobLinks=extractedUrls,
             llm=llm,
             keywords=keywords,
         )
@@ -148,7 +148,7 @@ async def run_agent(target_url, keywords, location, language):
             # Termination condition
             if tool_name == "list_matching_vacancies_tool":
                 print("[*] Extraction complete. Printing and terminating loop.")
-                print(tool_result)
+                # print(tool_result)
                 for url in tool_result:
                     print(url)
                 await browser.close()

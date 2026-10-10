@@ -668,20 +668,20 @@ class BrowserTools:
         ]
 
         print(f"[*] Extracted {len(job_links)} matching links.")
-        print(job_links)
 
         return job_links
 
 class MatchingVacancies(BaseModel):
     job_links: list[JobLink] = Field(
-        description="List of matching job vacancy URLs and their visible text values."
+        description="All job vacancies matching the user's criteria. "
+                    "Include every relevant vacancy, not just the best match."
     )
 
-async def list_matching_vacancies(extractedUrls: list[JobLink], llm: ChatOpenAI, keywords: str) -> list[JobLink]:
+async def list_matching_vacancies(jobLinks: list[JobLink], llm: ChatOpenAI, keywords: str) -> list[JobLink]:
         """Identifies job vacancy URLs matching the specified keywords.
 
             Args:
-            extractedUrls: List of JobLink instances for discovered URLs.
+            jobLinks: List of unfiltered JobLink instances for discovered URLs.
             llm: Language model used to identify semantically matching vacancies.
             keywords: Keywords describing the desired vacancies.
 
@@ -691,21 +691,59 @@ async def list_matching_vacancies(extractedUrls: list[JobLink], llm: ChatOpenAI,
             Returns an empty list if no matching vacancies are found.
         """
 
-        if len(extractedUrls) == 0:
+        if len(jobLinks) == 0:
             # No URLs passed
             print("Zero extracted URLs, no matching vacancies")
-            return extractedUrls
+            return jobLinks
+
+        # print(f"Input vacancy count: {len(jobLinks)}")
+
+        # for job in jobLinks:
+        #     print(f"INPUT: {job.url} | {job.text[:100]}")
         
         # Ask LLM to pick ONLY job vacancy URLs from the clean list
         extract_prompt = f"""
-        Given the list of `JobLink` instances {extractedUrls}, extract ONLY the `JobLink` instances that are relevant.
-        To decide whether a vacancy is relevant or not, consider `url` and 'text` elements and decode based on keyword and semantic matches for the criteria : '{keywords}'.
-        If no matching vacancies can be found after exhausting relevant paths, return zero `JobLink` instances. DO NOT invent/hallucinate vacancies.
+        Search criteria: {keywords}
+
+        Candidate vacancies:
+        {jobLinks}
+
+        Return every vacancy related to software development.
+        Return all matching vacancies in the job_links list using search criteria for direct keyword matches and contexual similarity.
+        Do not return only the best match.
         """
+        # extract_prompt = f"""
+        # You are an assistant that identifies job vacancies matching the user's criteria.
+
+        # User's criteria:
+        # {keywords}
+
+        # Candidate job vacancies:
+        # {jobLinks}
+
+        # Instructions:
+        # 1. Evaluate every candidate vacancy independently against the user's criteria.
+        # 2. Return ALL vacancies that reasonably match the criteria, not just the best match.
+        # 3. Consider related job titles, responsibilities, technologies, and transferable skills.
+        # 4. Do not require an exact keyword match. For example, a Backend Developer
+        # role may match software engineering criteria even if its title differs.
+        # 5. Exclude careers landing pages, job search pages, company information pages,
+        # and other links that do not represent individual job vacancies.
+        # 6. Do not invent information that is not supported by the provided link text.
+        # 7. Preserve the original URL and text for every matching vacancy.
+        # 8. If uncertain whether a vacancy matches, include it when the available
+        # information provides reasonable evidence of relevance.
+        # 9. Return an empty list only if no candidates match.
+
+        # Return every matching vacancy using the required structured output.
+        # """
         
         extractor = llm.with_structured_output(
             MatchingVacancies,
             method="json_schema",
         )        
         result = extractor.invoke(extract_prompt)
+
+        # print("RAW LLM RESULT:", result)
+
         return result.job_links
