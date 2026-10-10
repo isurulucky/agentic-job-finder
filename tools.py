@@ -2,9 +2,14 @@ import json
 from pydantic import BaseModel, Field
 from playwright.async_api import Page
 from langchain_openai import ChatOpenAI
+from job_url_filter import filter_job_links
 
 # class ExtractedJobs(BaseModel):
 #     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
+
+class JobLink(BaseModel):
+    url: str = Field(description="The full URL of the job vacancy.")
+    text: str = Field(description="The visible anchor text or title of the vacancy link.") 
 
 class BrowserTools:
     def __init__(self, page: Page, llm: ChatOpenAI, keywords: str):
@@ -606,10 +611,9 @@ class BrowserTools:
     #     # for url in result.job_urls:
     #     #     print(url)
             
-    #     return result.job_urls
-    
+    #     return result.job_urls 
 
-    async def extract_urls(self) -> dict[str, str]:
+    async def extract_urls(self) -> list[JobLink]:
         """Extract all visible links from the current page with their text and URL.
         
             Returns:
@@ -637,23 +641,36 @@ class BrowserTools:
                 );
         }
         """
-
         raw_links = await self.page.evaluate(js_extract)
 
         # Deduplicate by URL
         unique_links = {}
+
         for link in raw_links:
-            unique_links[link["href"]] = link["text"]
+            url = link["href"]
+            text = link["text"]
 
-        links = {url: text for url, text in unique_links.items()}
-        
-        print(f"[*] Extracted {len(links)} links.")
+            if url and url not in unique_links:
+                unique_links[url] = text
 
-        return links
+        # Convert to dictionaries
+        links = [
+            {"url": url, "text": text}
+            for url, text in unique_links.items()
+        ]
 
-class JobLink(BaseModel):
-    url: str = Field(description="The full URL of the job vacancy.")
-    text: str = Field(description="The visible anchor text or title of the vacancy link.")
+        # Filter using URL patterns and ATS domains
+        links = filter_job_links(links)
+
+        # Convert to JobLink instances
+        job_links = [
+            JobLink(url=link["url"], text=link["text"]) for link in links
+        ]
+
+        print(f"[*] Extracted {len(job_links)} matching links.")
+        print(job_links)
+
+        return job_links
 
 class MatchingVacancies(BaseModel):
     job_links: list[JobLink] = Field(
