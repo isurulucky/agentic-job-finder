@@ -610,38 +610,11 @@ async def list_matching_vacancies(jobLinks: list[JobLink], llm: ChatOpenAI, keyw
         Return all matching vacancies in the job_links list using search criteria for direct keyword matches and contexual similarity.
         Do not return only the best match.
         """
-        # extract_prompt = f"""
-        # You are an assistant that identifies job vacancies matching the user's criteria.
-
-        # User's criteria:
-        # {keywords}
-
-        # Candidate job vacancies:
-        # {jobLinks}
-
-        # Instructions:
-        # 1. Evaluate every candidate vacancy independently against the user's criteria.
-        # 2. Return ALL vacancies that reasonably match the criteria, not just the best match.
-        # 3. Consider related job titles, responsibilities, technologies, and transferable skills.
-        # 4. Do not require an exact keyword match. For example, a Backend Developer
-        # role may match software engineering criteria even if its title differs.
-        # 5. Exclude careers landing pages, job search pages, company information pages,
-        # and other links that do not represent individual job vacancies.
-        # 6. Do not invent information that is not supported by the provided link text.
-        # 7. Preserve the original URL and text for every matching vacancy.
-        # 8. If uncertain whether a vacancy matches, include it when the available
-        # information provides reasonable evidence of relevance.
-        # 9. Return an empty list only if no candidates match.
-
-        # Return every matching vacancy using the required structured output.
-        # """
         
         extractor = llm.with_structured_output(
             MatchingVacancies,
             method="json_schema",
         )        
         result = extractor.invoke(extract_prompt)
-
-        # print("RAW LLM RESULT:", result)
 
         return result.job_links
