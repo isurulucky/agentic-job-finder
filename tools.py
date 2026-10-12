@@ -1,7 +1,7 @@
 import json
 from pydantic import BaseModel, Field
 from playwright.async_api import Page
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from job_url_filter import filter_job_links
 
 class JobLink(BaseModel):
@@ -9,7 +9,7 @@ class JobLink(BaseModel):
     text: str = Field(description="The visible anchor text or title of the vacancy link.") 
 
 class BrowserTools:
-    def __init__(self, page: Page, llm: ChatOpenAI, keywords: str):
+    def __init__(self, page: Page, llm: BaseChatModel, keywords: str):
         self.page = page
         self.llm = llm
         self.state_version = 0
@@ -575,7 +575,7 @@ class MatchingVacancies(BaseModel):
                     "Include every relevant vacancy, not just the best match."
     )
 
-async def list_matching_vacancies(jobLinks: list[JobLink], llm: ChatOpenAI, keywords: str) -> list[JobLink]:
+async def list_matching_vacancies(jobLinks: list[JobLink], llm: BaseChatModel, keywords: str) -> list[JobLink]:
         """Identifies job vacancy URLs matching the specified keywords.
 
             Args:
