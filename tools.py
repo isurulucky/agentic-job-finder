@@ -4,9 +4,6 @@ from playwright.async_api import Page
 from langchain_openai import ChatOpenAI
 from job_url_filter import filter_job_links
 
-# class ExtractedJobs(BaseModel):
-#     job_urls: list[str] = Field(description="List of matching job vacancy URLs")
-
 class JobLink(BaseModel):
     url: str = Field(description="The full URL of the job vacancy.")
     text: str = Field(description="The visible anchor text or title of the vacancy link.") 
@@ -514,105 +511,6 @@ class BrowserTools:
                 "next_step": "get_page_state"
             }
         
-    # async def extract_urls(self) -> list[str]:
-    #     """Extracts and returns unique HTTP(S) URLs from links currently visible on the page.
-
-    #     Returns:
-    #     list[str]: Unique URLs found in visible link elements on the current page.
-    #     """
-
-    #     print("\n[*] Extracting job links directly from DOM...")
-
-    #     await self.page.wait_for_timeout(2000)
-
-    #     js_extract = """
-    #     () => {
-    #         const links = Array.from(document.querySelectorAll('a[href]'));
-
-    #         return links
-    #             .map(a => ({
-    #                 text: (a.innerText || a.getAttribute('aria-label') || '')
-    #                     .trim()
-    #                     .replace(/\\s+/g, ' '),
-    #                 href: a.href
-    #             }))
-    #             .filter(item =>
-    #                 item.text.length > 0 &&
-    #                 item.href.startsWith('http')
-    #             );
-    #     }
-    #     """
-
-    #     raw_links = await self.page.evaluate(js_extract)
-
-    #     # Deduplicate by URL
-    #     unique_links = {}
-    #     for link in raw_links:
-    #         unique_links[link["href"]] = link["text"]
-
-    #     urls = list(unique_links.keys())
-
-    #     return urls
-
-    # async def print_urls(self, urls: list[str]) -> None:
-    #     """ Prints the given URLs to the console. 
-
-    #         Args:
-    #             urls: list of URLs to be printed to the console.
-    #     """
-    #     for url in urls:
-    #         print(url)
-
-    # async def extract_urls(self) -> list[str]:
-    #     """Extracts job related URLs from the current page matching the user's keywords and prints them to the console.
-        
-    #     Returns:
-    #         list[str]: Unique job related URLs found in the current page.
-    #     """
-    #     print("\n[*] Extracting job links directly from DOM...")
-        
-    #     # Wait a moment for dynamic job cards to render in React/Vue
-    #     await self.page.wait_for_timeout(2000)
-        
-    #     # Extract all visible links with their inner text and full absolute hrefs
-    #     js_extract = """
-    #     () => {
-    #         const links = Array.from(document.querySelectorAll('a[href]'));
-    #         return links
-    #             .map(a => ({
-    #                 text: (a.innerText || a.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' '),
-    #                 href: a.href // Absolute URL
-    #             }))
-    #             .filter(item => item.text.length > 0 && item.href.startsWith('http'));
-    #     }
-    #     """
-    #     raw_links = await self.page.evaluate(js_extract)
-        
-    #     # Deduplicate links
-    #     unique_links = {link['href']: link['text'] for link in raw_links}
-    #     formatted_links = [f"Text: '{text}' | URL: {href}" for href, text in unique_links.items()]
-        
-    #     # Truncate string representation if page has hundreds of nav links
-    #     links_text = "\n".join(formatted_links[:300]) 
-        
-    #     # Ask LLM to pick ONLY job vacancy URLs from the clean list
-    #     extract_prompt = f"""
-    #     Given the current page {self.page}, extract ONLY the URLs that correspond to specific job vacancie which semantically match the keywords: '{self.keywords}'.
-    #     Ignore any other links contained.
-        
-    #     Links:
-    #     {links_text}
-    #     """
-        
-    #     extractor = self.llm.with_structured_output(ExtractedJobs)
-    #     result = extractor.invoke(extract_prompt)
-        
-    #     # print("\n=== FINAL EXTRACTED JOB URLS ===")
-    #     # for url in result.job_urls:
-    #     #     print(url)
-            
-    #     return result.job_urls 
-
     async def extract_urls(self) -> list[JobLink]:
         """Extract all visible links from the current page with their text and URL.
         

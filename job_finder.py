@@ -8,8 +8,6 @@ from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
 from tools import BrowserTools, JobLink, list_matching_vacancies
 
-# os.environ["OPENAI_API_KEY"] = "your-api-key"
-
 async def run_agent(target_url, keywords, location, language):    
     llm = ChatOpenAI(model="o4-mini", temperature=1)
     # llm = ChatOpenAI(model="gpt-5.4-nano", temperature=0)
@@ -31,8 +29,6 @@ async def run_agent(target_url, keywords, location, language):
 
     # Instantiate BroweserTools
     browser_tools = BrowserTools(page, llm, keywords)
-
-    # Bind tools to the LLM
 
     async def list_matching_vacancies_tool(extractedUrls: list[JobLink]) -> list[JobLink]:
 
@@ -69,10 +65,6 @@ async def run_agent(target_url, keywords, location, language):
             coroutine=list_matching_vacancies_tool,
             name="list_matching_vacancies_tool",
         ),
-        # StructuredTool.from_function(
-        #     coroutine=browser_tools.print_urls,
-        #     name="print_urls"
-        # ),
     ]
     llm_with_tools = llm.bind_tools(tools)
     tools_map = {t.name: t for t in tools}
