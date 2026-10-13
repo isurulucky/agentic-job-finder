@@ -4,6 +4,10 @@ import time
 from playwright.async_api import async_playwright
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models import LanguageModelInput
+from langchain_core.messages import AIMessage
+from langchain_core.messages.base import BaseMessage
+from langchain_core.runnables import Runnable
 from langchain_core.tools import StructuredTool, tool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
@@ -12,10 +16,10 @@ from tools import BrowserTools, JobLink, list_matching_vacancies
 class AgentLoop: 
     def __init__(self, target_urls: list[str], keywords: str, location: str, language: str) -> None:
         self.target_urls = target_urls
-        self.keywords = keywords
-        self.location = location
-        self.language = language
-        self.system_message = """
+        # self.keywords = keywords
+        # self.location = location
+        # self.language = language
+        self.system_message = f"""
             You are an autonomous web agent finding job vacancies matching:
             - Keywords: "{keywords}"
             - Location: "{location}"
@@ -43,9 +47,10 @@ class AgentLoop:
             At every step, choose the single next action that makes the most progress toward finding matching vacancies.        
             """
 
-    async def run(self, model: str, model_provider: str, tempterature: int = 1) -> None:
+    async def run(self, model: str, model_provider: str, tempterature: int = 1) -> dict[str, str]:
         llm = init_chat_model(model=model, model_provider=model_provider, temperature=tempterature)
-
+        
+        results: dict[str, str] = {}
         for target_url in self.target_urls:
             playwright = await async_playwright().start()
             browser = await playwright.chromium.launch(headless=False)
@@ -54,7 +59,7 @@ class AgentLoop:
             context = await browser.new_context()
             page = await context.new_page()
             
-            print(f"[*] Navigating to {target_url}...")
+            print(f"\n [*] Navigating to {target_url}...")
             
             # Enforce the network idle directly in the goto command
             try:
@@ -106,35 +111,7 @@ class AgentLoop:
 
             # Agent loop
             messages = [
-                SystemMessage(content=f"""
-                You are an autonomous web agent finding job vacancies matching:
-                - Keywords: "{keywords}"
-                - Location: "{location}"
-                - Language: "{language}"
-
-                Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat. Use as minimum loop iterations as possible. At every step, choose the single next action that makes the most progress toward finding matching vacancies.
-
-                Rules:
-                1. ALWAYS call `get_page_state` before acting.
-                2. Remove consent forms, cookie banners, modals, and other blockers in each step.
-                3. Only navigate career/job pages. Ignore generic sites, product, blog, documentation, or unrelated search pages.
-                4. Prefer, in order:
-                    a) job opening/career related filters, such as drop downs, check boxes, radio buttons, buttons, etc.
-                    b) links to job-search/vacancies/current openings pages,
-                    c) career-specific search inputs.
-                    - Only enter search text on searchable text fields, not anything else. Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
-                    - Only fill inputs whose label, placeholder, name, or surrounding context
-                5. After EVERY `interact`, call `get_page_state` again. Do NOT call `interact` more than once in a row.
-                6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
-                7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
-                8. Once filtering/searching is complete, call `extract_urls`. 
-                9. With the results returned from `extract_urls`, call `list_matching_vacancies` and terminate.
-                
-
-                At every step, choose the single next action that makes the most progress toward finding matching vacancies.        
-                """
-                ),
-
+                SystemMessage(content=self.system_message),
                 HumanMessage(content="Begin by observing the page state.")
             ]
 
@@ -144,7 +121,11 @@ class AgentLoop:
                 raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
             iterations = 15
+            terminate = False
             for iteration in range(0, iterations):
+                if terminate:
+                    break
+
                 print(f"\n--- Iteration {iteration+1}/{iterations} ---")
                 
                 # Ask the LLM to reason and pick a tool
@@ -154,7 +135,8 @@ class AgentLoop:
                 # Check if the LLM decided to use a tool
                 if not ai_msg.tool_calls:
                     print("[*] Agent stopped calling tools. Text response:", ai_msg.content)
-                    break
+                    terminate = True
+                    continue
                     
                 # Execute the chosen tool(s)
                 for tool_call in ai_msg.tool_calls:
@@ -172,25 +154,25 @@ class AgentLoop:
                         )
                     )
                     
-                    # Termination condition
                     if tool_name == "list_matching_vacancies_tool":
                         print("[*] Extraction complete. Printing and terminating loop.")
-                        # print(tool_result)
                         for result in tool_result:
-                            print(result.url)
-                        await browser.close()
-                        await playwright.stop()
-                        break
-                        
+                            results[result.url] = result.text
+                        terminate = True
+                        break 
 
-            print("[*] Loop limit reached or extraction finished.")
+            print(f"\n [*] Loop limit reached or extraction finished for url: {target_url}")
             await browser.close()
             await playwright.stop()
+        return results
+
+# async def invoke_tool(llm_with_tools: Runnable[LanguageModelInput, AIMessage],  list[BaseMessage], tool_map: dict[str, StructuredTool]) -> bool: 
 
 if __name__ == "__main__":
     target_urls = [
         "https://www.coolblue.nl/en/vacancies",
-        "https://catawiki.careers/vacancies"
+        "https://catawiki.careers/vacancies",
+        "https://careers.adyen.com/"
     ]
     # target_url = "https://www.coolblue.nl/en/vacancies"
     # target_url = "https://www.leaseweb.com/en/about-us/career"
@@ -209,7 +191,11 @@ if __name__ == "__main__":
     )
     model = "o4-mini"
     provider = "openai"
-    asyncio.run(agentLoop.run(
+    vacancies = asyncio.run(agentLoop.run(
         model, 
         provider
     ))
+    if len(vacancies) > 0:
+        print(f"Openings/vacancies found: {len(vacancies)}")
+    for url in vacancies: 
+        print(url)
