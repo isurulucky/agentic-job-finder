@@ -2,7 +2,7 @@ import json
 from pydantic import BaseModel, Field
 from playwright.async_api import Page
 from langchain_core.language_models.chat_models import BaseChatModel
-from job_url_filter import filter_job_links
+from url_filter import filter_job_links
 
 class JobLink(BaseModel):
     url: str = Field(description="The full URL of the job vacancy.")
