@@ -36,7 +36,8 @@ class AgentLoop:
                 b) links to job-search/vacancies/current openings pages,
                 c) career-specific search inputs.
                 - Only enter search text on searchable text fields, not anything else. Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
-                - Only fill inputs whose label, placeholder, name, or surrounding context
+                - Only fill inputs whose label, placeholder, name, or surrounding context.
+               If necessary, click the relevant button to filter by the selected drop down items, ticked boxes and/or checkboxes, search criteria, etc.
             5. After EVERY `interact`, call `get_page_state` again. Do NOT call `interact` more than once in a row.
             6. Base each action on the current observed state. Avoid arbitrary clicks, repeated ineffective actions, and navigation loops.
             7. Treat keywords as semantic matches against job titles/descriptions and location as the actual vacancy location. Do not invent matches.
@@ -51,120 +52,169 @@ class AgentLoop:
         llm = init_chat_model(model=model, model_provider=model_provider, temperature=tempterature)
         
         results: dict[str, str] = {}
-        for target_url in self.target_urls:
-            playwright = await async_playwright().start()
+        async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=False)
-            
-            # Explicitly create the context to set standard browser locales/headers
-            context = await browser.new_context()
-            page = await context.new_page()
-            
-            print(f"\n [*] Navigating to {target_url}...")
-            
-            # Enforce the network idle directly in the goto command
             try:
-                await page.goto(target_url, wait_until="networkidle", timeout=30000)
-            except Exception as e:
-                raise Exception(f"[*] Initial load error: {e}")
+                for target_url in self.target_urls:
+                    # Explicitly create the context to set standard browser locales/headers
+                    context = None
+                    try:
+                        context = await browser.new_context()
+                        page = await context.new_page()
+                        
+                        print(f"\n[*] Navigating to {target_url}...")
+                        
+                        # Enforce the network idle directly in the goto command
+                        try:
+                            await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                        except Exception as e:
+                            print(f"[!] Page load error for {target_url}: {e}")
+                            continue
 
-            # Instantiate BroweserTools
-            browser_tools = BrowserTools(page, llm, keywords)
+                        # Instantiate BroweserTools
+                        browser_tools = BrowserTools(page, llm, keywords)
 
-            async def list_matching_vacancies_tool(extractedUrls: list[JobLink]) -> list[JobLink]:
+                        async def list_matching_vacancies_tool(extractedUrls: list[JobLink]) -> list[JobLink]:
 
-                """Identifies job vacancy URLs matching the specified keywords.
+                            """Identifies job vacancy URLs matching the specified keywords.
 
-                    Args:
-                    extractedUrls: Mapping of URLs to their visible link text.
+                                Args:
+                                extractedUrls: Mapping of URLs to their visible link text.
 
-                    Returns:
-                    list[JobLink]: List of JobLink instances corresponding to specific job vacancies that
-                    semantically match the keywords, with their visible link text.
-                    Returns an empty dictionary if no matching vacancies are found.
-                """
-                return await list_matching_vacancies(
-                    jobLinks=extractedUrls,
-                    llm=llm,
-                    keywords=keywords,
-                )
+                                Returns:
+                                list[JobLink]: List of JobLink instances corresponding to specific job vacancies that
+                                semantically match the keywords, with their visible link text.
+                                Returns an empty dictionary if no matching vacancies are found.
+                            """
+                            return await list_matching_vacancies(
+                                jobLinks=extractedUrls,
+                                llm=llm,
+                                keywords=keywords,
+                            )
 
-            tools = [
-                StructuredTool.from_function(
-                    coroutine=browser_tools.get_page_state,
-                    name="get_page_state",
-                ),
-                StructuredTool.from_function(
-                    coroutine=browser_tools.interact,
-                    name="interact",
-                ),
-                StructuredTool.from_function(
-                    coroutine=browser_tools.extract_urls,
-                    name="extract_urls",
-                ),
-                StructuredTool.from_function(
-                    coroutine=list_matching_vacancies_tool,
-                    name="list_matching_vacancies_tool",
-                ),
-            ]
-            llm_with_tools = llm.bind_tools(tools)
-            tools_map = {t.name: t for t in tools}
+                        tools = [
+                            StructuredTool.from_function(
+                                coroutine=browser_tools.get_page_state,
+                                name="get_page_state",
+                            ),
+                            StructuredTool.from_function(
+                                coroutine=browser_tools.interact,
+                                name="interact",
+                            ),
+                            StructuredTool.from_function(
+                                coroutine=browser_tools.extract_urls,
+                                name="extract_urls",
+                            ),
+                            StructuredTool.from_function(
+                                coroutine=list_matching_vacancies_tool,
+                                name="list_matching_vacancies_tool",
+                            ),
+                        ]
+                        llm_with_tools = llm.bind_tools(tools)
+                        tools_map = {t.name: t for t in tools}
 
-            # Agent loop
-            messages = [
-                SystemMessage(content=self.system_message),
-                HumanMessage(content="Begin by observing the page state.")
-            ]
+                        # Agent loop
+                        messages = [
+                            SystemMessage(content=self.system_message),
+                            HumanMessage(content="Begin by observing the page state.")
+                        ]
 
-            def serialize_default(obj):
-                if isinstance(obj, BaseModel):
-                    return obj.model_dump()
-                raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+                        def serialize_default(obj):
+                            if isinstance(obj, BaseModel):
+                                return obj.model_dump()
+                            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
-            iterations = 15
-            terminate = False
-            for iteration in range(0, iterations):
-                if terminate:
-                    break
+                        iterations = 15
+                        terminate = False
+                        for iteration in range(0, iterations):
+                            if terminate:
+                                break
 
-                print(f"\n--- Iteration {iteration+1}/{iterations} ---")
-                
-                # Ask the LLM to reason and pick a tool
-                ai_msg = llm_with_tools.invoke(messages)
-                messages.append(ai_msg)
-                
-                # Check if the LLM decided to use a tool
-                if not ai_msg.tool_calls:
-                    print("[*] Agent stopped calling tools. Text response:", ai_msg.content)
-                    terminate = True
-                    continue
-                    
-                # Execute the chosen tool(s)
-                for tool_call in ai_msg.tool_calls:
-                    tool_name = tool_call["name"]
-                    tool_args = tool_call["args"]
-                    
-                    chosen_tool = tools_map[tool_name]
-                    tool_result = await chosen_tool.ainvoke(tool_args)
-                    
-                    # Append the result back to the conversation history
-                    messages.append(
-                        ToolMessage(
-                            tool_call_id=tool_call["id"], 
-                            content=json.dumps(tool_result, default=serialize_default)
-                        )
-                    )
-                    
-                    if tool_name == "list_matching_vacancies_tool":
-                        print("[*] Extraction complete. Printing and terminating loop.")
-                        for result in tool_result:
-                            results[result.url] = result.text
-                        terminate = True
-                        break 
+                            print(f"\n--- Iteration {iteration+1}/{iterations} ---")
+                            
+                            # Ask the LLM to reason and pick a tool
+                            try:
+                                ai_msg = await llm_with_tools.ainvoke(messages)
+                            except Exception as e:
+                                print(f"[!] Model invocation failed for {target_url}: {e}")
+                                break
+                            messages.append(ai_msg)
+                            
+                            # Check if the LLM decided to use a tool
+                            if not ai_msg.tool_calls:
+                                print("[*] Agent stopped calling tools. Text response:", ai_msg.content)
+                                terminate = True
+                                continue
+                                
+                            # Execute the chosen tool(s)
+                            for tool_call in ai_msg.tool_calls:
+                                tool_name = tool_call["name"]
+                                tool_args = tool_call["args"]
+                                
+                                chosen_tool = tools_map.get(tool_name)
+                                if not chosen_tool:
+                                    tool_result = {
+                                        "success": False,
+                                        "message": f"Unknown tool: {tool_name}",
+                                    }
+                                    messages.append(
+                                        ToolMessage(
+                                            tool_call_id=tool_call["id"],
+                                            content=json.dumps(tool_result, default=serialize_default)
+                                        )
+                                    )
+                                    continue
 
-            print(f"\n [*] Loop limit reached or extraction finished for url: {target_url}")
-            await browser.close()
-            await playwright.stop()
-        return results
+                                try:
+                                    tool_result = await chosen_tool.ainvoke(tool_args)
+                                except Exception as e:
+                                    print(f"[!] Tool invocation failed for {target_url} with tool args {tool_args}: {e}")
+                                    tool_result = {
+                                        "success": False,
+                                        "message": f"Tool invocation failed for {tool_name}: {e}",
+                                    } 
+                                    messages.append(
+                                        ToolMessage(
+                                            tool_call_id=tool_call["id"],
+                                            content=json.dumps(tool_result, default=serialize_default)
+                                        )
+                                    )
+                                    continue
+                                
+                                # Append the result back to the conversation history
+                                successful_tool_result = {
+                                    "success": True,
+                                    "data": tool_result,
+                                }
+                                messages.append(
+                                    ToolMessage(
+                                        tool_call_id=tool_call["id"], 
+                                        content=json.dumps(successful_tool_result, default=serialize_default)
+                                    )
+                                )
+                                
+                                if tool_name == "list_matching_vacancies_tool":
+                                    print("[*] Extraction complete. Printing and terminating loop.")
+                                    for result in tool_result:
+                                        results[result.url] = result.text
+                                    terminate = True
+                                    break 
+
+                        print(f"\n[*] Loop limit reached or extraction finished for url: {target_url}")
+                    except Exception as e:
+                        # Isolate unexpected failures to the current website.
+                        print(f"[!] Failed to process {target_url}: {e}")
+
+                    finally:
+                        # Always release the per-site browser context.
+                        if context is not None:
+                            try:
+                                await context.close()
+                            except Exception as e:
+                                print(f"[!] Failed to close context for {target_url}: {e}")
+            finally:
+                await browser.close()
+            return results
 
 # async def invoke_tool(llm_with_tools: Runnable[LanguageModelInput, AIMessage],  list[BaseMessage], tool_map: dict[str, StructuredTool]) -> bool: 
 
