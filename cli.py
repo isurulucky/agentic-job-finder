@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from datetime import date
 
 from job_finder import AgentLoop
 
@@ -61,14 +62,15 @@ async def main() -> None:
         language=args.language,
     )
 
-    vacancies = await agent_loop.run(
+    openings = await agent_loop.run(
         model=args.model,
         model_provider=args.provider,
     )
 
-    print(f"\nMatching vacancies found: {len(vacancies)}")
+    today = date.today().strftime("%d/%m/%Y")
+    print(f"\nFound {len(openings)} matching openings on {today}.")
 
-    for url, title in vacancies.items():
+    for url, title in openings.items():
         print(f"{url}")
 
 
