@@ -13,3 +13,4 @@ TODOs:
 2. Support local caching for sites successfully navigated?
 
 3. Include self-learning capabilities for agents
+   - Use a vector DB?
