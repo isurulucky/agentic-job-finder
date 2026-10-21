@@ -2,7 +2,7 @@ import argparse
 import asyncio
 from datetime import date
 
-from job_finder import AgentLoop
+from agent_loop import AgentLoop
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
