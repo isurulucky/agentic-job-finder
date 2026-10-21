@@ -575,46 +575,52 @@ class MatchingVacancies(BaseModel):
                     "Include every relevant vacancy, not just the best match."
     )
 
-async def list_matching_vacancies(jobLinks: list[JobLink], llm: BaseChatModel, keywords: str) -> list[JobLink]:
-        """Identifies job vacancy URLs matching the specified keywords.
+class FilteringTools:
+    def __init__(self, llm: BaseChatModel, keywords: str):
+        self.llm = llm
+        self.keywords = keywords
 
-            Args:
-            jobLinks: List of unfiltered JobLink instances for discovered URLs.
-            llm: Language model used to identify semantically matching vacancies.
-            keywords: Keywords describing the desired vacancies.
+    async def list_matching_vacancies(self, jobLinks: list[JobLink]) -> list[JobLink]:
+            """Identifies job vacancy URLs matching the specified keywords.
 
-            Returns:
-            list[job_links]: List of JobLink instances corresponding to specific job vacancies that
-            semantically match the keywords, with their visible link text.
-            Returns an empty list if no matching vacancies are found.
-        """
 
-        if len(jobLinks) == 0:
-            # No URLs passed
-            print("Zero extracted URLs, no matching vacancies")
-            return jobLinks
+                Args:
+                jobLinks: List of unfiltered JobLink instances for discovered URLs.
+                llm: Language model used to identify semantically matching vacancies.
+                keywords: Keywords describing the desired vacancies.
 
-        # print(f"Input vacancy count: {len(jobLinks)}")
+                Returns:
+                list[job_links]: List of JobLink instances corresponding to specific job vacancies that
+                semantically match the keywords, with their visible link text.
+                Returns an empty list if no matching vacancies are found.
+            """
 
-        # for job in jobLinks:
-        #     print(f"INPUT: {job.url} | {job.text[:100]}")
-        
-        # Ask LLM to pick ONLY job vacancy URLs from the clean list
-        extract_prompt = f"""
-        Search criteria: {keywords}
+            if len(jobLinks) == 0:
+                # No URLs passed
+                print("Zero extracted URLs, no matching vacancies")
+                return jobLinks
 
-        Candidate vacancies:
-        {jobLinks}
+            # print(f"Input vacancy count: {len(jobLinks)}")
 
-        Return every vacancy related to software development.
-        Return all matching vacancies in the job_links list using search criteria for direct keyword matches and contexual similarity.
-        Do not return only the best match.
-        """
-        
-        extractor = llm.with_structured_output(
-            MatchingVacancies,
-            method="json_schema",
-        )        
-        result = extractor.invoke(extract_prompt)
+            # for job in jobLinks:
+            #     print(f"INPUT: {job.url} | {job.text[:100]}")
+            
+            # Ask LLM to pick ONLY job vacancy URLs from the clean list
+            extract_prompt = f"""
+            Search criteria: {self.keywords}
 
-        return result.job_links
+            Candidate vacancies:
+            {jobLinks}
+
+            Return every vacancy related to software development.
+            Return all matching vacancies in the job_links list using search criteria for direct keyword matches and contexual similarity.
+            Do not return only the best match.
+            """
+            
+            extractor = self.llm.with_structured_output(
+                MatchingVacancies,
+                method="json_schema",
+            )        
+            result = extractor.invoke(extract_prompt)
+
+            return result.job_links
