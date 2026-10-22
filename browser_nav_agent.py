@@ -3,7 +3,7 @@ import json
 
 from playwright.async_api import async_playwright
 
-from langchain.chat_models import init_chat_model
+from langchain.chat_models import init_chat_model, BaseChatModel
 from langchain_core.tools import StructuredTool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
@@ -43,15 +43,15 @@ class BrowserNavigationAgent:
 
     def __init__(
         self,
-        target_urls: list[str],
         keywords: str,
         location: str,
         language: str,
+        llm:  BaseChatModel,
     ) -> None:
-        self.target_urls = target_urls
         self.keywords = keywords
         self.location = location
         self.language = language
+        self.llm = llm
 
         self.system_message = f"""
             You are an autonomous browser agent tasked with discovering
@@ -92,18 +92,16 @@ class BrowserNavigationAgent:
 
     async def run(
         self,
-        model: str,
-        model_provider: str,
-        temperature: float = 1,
+        target_urls: list[str],
         headless: bool = False,
     ) -> list[JobLink]:
         """Navigate target websites and return discovered vacancy links."""
 
-        llm = init_chat_model(
-            model=model,
-            model_provider=model_provider,
-            temperature=temperature,
-        )
+        # llm = init_chat_model(
+        #     model=model,
+        #     model_provider=model_provider,
+        #     temperature=temperature,
+        # )
 
         # Deduplicate candidates by URL while preserving discovery order.
         candidates: dict[str, JobLink] = {}
@@ -112,7 +110,7 @@ class BrowserNavigationAgent:
             browser = await playwright.chromium.launch(headless=headless)
 
             try:
-                for target_url in self.target_urls:
+                for target_url in target_urls:
                     context = None
                     termination_reason = "iteration_limit"
 
@@ -138,7 +136,7 @@ class BrowserNavigationAgent:
 
                         browser_tools = BrowserTools(
                             page,
-                            llm,
+                            self.llm,
                             self.keywords,
                         )
 
@@ -159,7 +157,7 @@ class BrowserNavigationAgent:
                             ),
                         ]
 
-                        llm_with_tools = llm.bind_tools(tools)
+                        llm_with_tools = self.llm.bind_tools(tools)
                         tools_map = {tool.name: tool for tool in tools}
 
                         messages = [
