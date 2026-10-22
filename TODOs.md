@@ -5,12 +5,18 @@ Agentic app capable of navigating career portals to find suitable opportunities 
 TODOs:
 -----
 
-1. Separate Browser interaction and finding matching vacancies. 
-   - Change the api so that __init__ takes llm and details, and run takes target urls in brower agent
-   - in filtering agent __init__ should take llm and stuff
-   - test changes
+1 TODO: remove convert to dictionaries 
+    links = [
+        {"url": cl.url, "text": cl.text}
+        for cl in candidate_links
+    ]
 
-1.1 Python logging
+    # Filter using URL patterns and ATS domains
+    links = find_candidate_urls(links)
+   
+1.1 Remove unwanted code
+
+1.2 Python logging
 
 2. Support local caching for sites successfully navigated?
 
