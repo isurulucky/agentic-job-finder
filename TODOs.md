@@ -6,7 +6,9 @@ TODOs:
 -----
 
 1. Separate Browser interaction and finding matching vacancies. 
-   - Navigate with nav agent, extract the links and pass them deterministically to the finding agent/
+   - Change the api so that __init__ takes llm and details, and run takes target urls in brower agent
+   - in filtering agent __init__ should take llm and stuff
+   - test changes
 
 1.1 Python logging
 
