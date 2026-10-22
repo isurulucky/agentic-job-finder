@@ -34,7 +34,7 @@ ATS_PLATFORMS = [
     "taleo.net",
 ]
 
-def filter_job_links(
+def find_candidate_urls(
     links: list[dict[str, str]],
 ) -> list[dict[str, str]]:
     """Filters links using job-related URL patterns and ATS domains."""
