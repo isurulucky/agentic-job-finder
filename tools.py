@@ -2,7 +2,7 @@ import json
 from pydantic import BaseModel, Field
 from playwright.async_api import Page
 from langchain_core.language_models.chat_models import BaseChatModel
-from url_filter import filter_job_links
+from url_finder import find_candidate_urls
 
 class JobLink(BaseModel):
     url: str = Field(description="The full URL of the job vacancy.")
@@ -558,7 +558,7 @@ class BrowserTools:
         ]
 
         # Filter using URL patterns and ATS domains
-        links = filter_job_links(links)
+        links = find_candidate_urls(links)
 
         # Convert to JobLink instances
         job_links = [
