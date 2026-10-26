@@ -5,20 +5,7 @@ Agentic app capable of navigating career portals to find suitable opportunities 
 TODOs:
 -----
 
-1 TODO: remove convert to dictionaries 
-    links = [
-        {"url": cl.url, "text": cl.text}
-        for cl in candidate_links
-    ]
-
-    # Filter using URL patterns and ATS domains
-    links = find_candidate_urls(links)
-   
-1.1 Remove unwanted code
-
-1.2 Python logging
+1. Include self-learning capabilities for agents
+   - Use a vector DB?
 
 2. Support local caching for sites successfully navigated?
-
-3. Include self-learning capabilities for agents
-   - Use a vector DB?
