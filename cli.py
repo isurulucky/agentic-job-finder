@@ -36,12 +36,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         default="gpt-5.4-mini",
-        help="LLM model (default: o4-mini).",
+        help="LLM model (default: gpt-5.4-mini).",
     )
     parser.add_argument(
         "--provider",
         default="openai",
         help="LLM provider (default: openai).",
+    )
+    parser.add_argument(
+        "--headless",
+        default=False,
+        type=bool,
+        help="Run Playwright in headless mode/not.",
     )
 
     return parser.parse_args()
@@ -73,7 +79,7 @@ async def main() -> None:
     )
     links = await browser_agent.run(
         target_urls=target_urls,
-        headless=False,
+        headless=args.headless,
     )
 
     # Filter candidates deterministically.
@@ -89,8 +95,6 @@ async def main() -> None:
     filtered_links = [
         JobLink(url=link["url"], text=link["text"]) for link in candidate_links
     ]
-
-    print(f"No. of links after filtering: {len(filtered_links)}")
 
     # Identify semantically matching vacancies.
     filtering_agent = VacancyFilterAgent(

@@ -97,12 +97,6 @@ class BrowserNavigationAgent:
     ) -> list[JobLink]:
         """Navigate target websites and return discovered vacancy links."""
 
-        # llm = init_chat_model(
-        #     model=model,
-        #     model_provider=model_provider,
-        #     temperature=temperature,
-        # )
-
         # Deduplicate candidates by URL while preserving discovery order.
         candidates: dict[str, JobLink] = {}
 
