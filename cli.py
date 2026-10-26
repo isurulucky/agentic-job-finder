@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="o4-mini",
+        default="gpt-5.4-mini",
         help="LLM model (default: o4-mini).",
     )
     parser.add_argument(
@@ -90,7 +90,7 @@ async def main() -> None:
         JobLink(url=link["url"], text=link["text"]) for link in candidate_links
     ]
 
-    print(f"Links after filtering: {filtered_links}")
+    print(f"No. of links after filtering: {len(filtered_links)}")
 
     # Identify semantically matching vacancies.
     filtering_agent = VacancyFilterAgent(
