@@ -289,7 +289,7 @@ class BrowserNavigationAgent:
                                 break
 
                         print(
-                            f"[*] Finished processing {target_url}: "
+                            f"\n[*] Finished processing {target_url}: "
                             f"{termination_reason}"
                         )
 

@@ -565,7 +565,7 @@ class BrowserTools:
             JobLink(url=link["url"], text=link["text"]) for link in links
         ]
 
-        print(f"[*] Extracted {len(job_links)} matching links.")
+        print(f"\n[*] Extracted {len(job_links)} matching links.")
 
         return job_links
 
