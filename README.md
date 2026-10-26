@@ -1,10 +1,12 @@
 # Agentic JobFinder
 
-A simple agentic command-line application to find job vacancies matching specified keywords, location, and language across multiple careers websites.
+Agentic JobFinder is a command-line application that discovers job vacancies matching specified keywords, location, and language across multiple careers websites.
 
-The application uses Playwright to navigate careers websites and an LLM to identify matching vacancies. Currently, it uses OpenAI GPT APIs for LLM functionality.
+The application uses a multi-agent architecture, with specialized agents responsible for navigating careers websites and extracting vacancy URLs, and identifying vacancies that semantically match the search criteria. Deterministic filtering complements the agents to improve efficiency and reduce irrelevant results.
 
-The URLs of matching vacancies are printed to standard output.
+Playwright enables browser automation, while LangChain provides the LLM integration. Any compatible reasoning model supported by LangChain can be configured, allowing you to choose your preferred model provider.
+
+Matching vacancy URLs are printed to standard output.
 
 ### How to Use
 
@@ -19,7 +21,7 @@ The following command-line arguments are supported:
 - Mandatory `--keywords`: Job search keywords, such as `Software Engineer` or `Python Developer`.
 - Mandatory `--location`: Target job location, such as `Europe` or `Netherlands`.
 - Mandatory `--language`: Required vacancy language, such as `English`.
-- Optional `--model`: LLM model to use. Defaults to `o4-mini`.
+- Optional `--model`: LLM model to use. Defaults to `gpt-5.4-mini`.
 - Optional `--provider`: LLM provider. Defaults to `openai`.
 
 ### Example
