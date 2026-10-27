@@ -4,8 +4,9 @@ from datetime import date
 from langchain.chat_models import init_chat_model
 
 from browser_nav_agent import BrowserNavigationAgent
+from nav_experience_store import NavExperienceStore
 from vacancy_filter_agent import VacancyFilterAgent
-from url_finder import find_candidate_urls
+from url_finder import find_candidate_urls, identify_framework
 from tools import JobLink
 
 def parse_args() -> argparse.Namespace:
@@ -70,42 +71,98 @@ async def main() -> None:
         model_provider=args.provider,
     )
 
-    # Discover candidate vacancy URLs.
+    experience_store = NavExperienceStore()
+
+    # Retrieve previous navigation experiences for each website.
+    experiences: dict[str, list[dict]] = {}
+
+    for target_url in target_urls:
+        framework = identify_framework(target_url)
+        previous_records = experience_store.retrieve(
+            framework=framework,
+            limit=10,
+        )
+
+        experiences[target_url] = [
+            record["experiences"]
+            for record in previous_records
+        ]
+
+        print(
+            f"[*] Retrieved {len(experiences[target_url])} "
+            f"experiences for {target_url} ({framework})."
+        )
+
+    # Discover candidate vacancy URLs using previous experiences.
     browser_agent = BrowserNavigationAgent(
         keywords=args.keywords,
         location=args.location,
         language=args.language,
         llm=llm,
     )
-    links = await browser_agent.run(
+
+    navigation_results = await browser_agent.run(
         target_urls=target_urls,
+        experiences=experiences,
         headless=args.headless,
     )
 
-    # Filter candidates deterministically.
-    # TODO: remove convert to dictionaries 
-    links = [
-        {"url": cl.url, "text": cl.text}
-        for cl in links
-    ]
+    # Store successful navigation experiences and collect vacancy links.
+    links: list[JobLink] = []
 
-    # Filter using URL patterns and ATS domains
-    candidate_links = find_candidate_urls(links)
+    for result in navigation_results:
+        framework = identify_framework(result.url)
+
+        if result.result_count > 0:
+            experience_id = experience_store.store(
+                framework=framework,
+                result_count=result.result_count,
+                experiences=result.experience,
+            )
+
+            if experience_id:
+                print(
+                    f"[*] Stored navigation experience for "
+                    f"{result.url} ({framework})."
+                )
+        else:
+            print(
+                f"[*] No vacancy links found for {result.url}; "
+                "experience not stored."
+            )
+
+        links.extend(result.job_links)
+
+    # Filter candidates deterministically using URL patterns and ATS domains.
+    candidate_links = find_candidate_urls(
+        [
+            {"url": link.url, "text": link.text}
+            for link in links
+        ]
+    )
 
     filtered_links = [
-        JobLink(url=link["url"], text=link["text"]) for link in candidate_links
+        JobLink(url=link["url"], text=link["text"])
+        for link in candidate_links
     ]
+
+    print(
+        f"[*] {len(links)} links discovered; "
+        f"{len(filtered_links)} candidates remain after URL filtering."
+    )
 
     # Identify semantically matching vacancies.
     filtering_agent = VacancyFilterAgent(
         llm=llm,
         keywords=args.keywords,
     )
-    
+
     job_links = await filtering_agent.run(filtered_links)
 
-    for jl in job_links:
-        print(f"{jl.url}")
+    print(f"\n[*] Found {len(job_links)} matching vacancies:")
+
+    for job_link in job_links:
+        print(job_link.url)
 
 
 if __name__ == "__main__":

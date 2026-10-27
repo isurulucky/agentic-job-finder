@@ -65,3 +65,22 @@ def find_candidate_urls(
             filtered_links.append(link)
 
     return filtered_links
+
+def identify_framework(url: str) -> str:
+    """Identify the ATS platform from a URL, or return its custom domain."""
+    hostname = urlparse(url).hostname
+
+    if not hostname:
+        raise ValueError(f"Invalid URL: {url}")
+
+    hostname = hostname.lower().removeprefix("www.")
+
+    for platform in ATS_PLATFORMS:
+        if hostname == platform or hostname.endswith(f".{platform}"):
+            return platform
+
+    # Use the registrable-looking domain for custom sites.
+    parts = hostname.split(".")
+    domain = ".".join(parts[-2:]) if len(parts) >= 2 else hostname
+
+    return f"custom-{domain}"
