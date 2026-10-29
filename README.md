@@ -2,9 +2,13 @@
 
 Agentic JobFinder is a command-line application that discovers job vacancies matching specified keywords, location, and language across multiple careers websites.
 
-The application uses a multi-agent architecture, with specialized agents responsible for navigating careers websites and extracting vacancy URLs, and identifying vacancies that semantically match the search criteria. Deterministic filtering complements the agents to improve efficiency and reduce irrelevant results.
+The application uses a **multi-agent architecture** with specialized agents for navigating careers websites, extracting vacancy URLs and identifying vacancies that semantically match the search criteria. Deterministic filtering complements the agents to improve efficiency and reduce irrelevant results.
 
-Playwright enables browser automation, while LangChain provides the LLM integration. Any compatible reasoning model supported by LangChain can be configured, allowing you to choose your preferred model provider.
+**Experience-based self-learning** enables the application to improve its navigation of careers websites over time. It stores successful navigation experiences associated with applicant tracking system (ATS) platforms and other career site providers, then retrieves and reuses relevant experiences during subsequent searches. This allows the navigation agent to leverage previously successful strategies when visiting familiar platforms while adapting its approach to unfamiliar websites.
+
+Navigation experiences are currently stored in a local SQL database using SQLite. This lightweight persistence mechanism allows the application to retain and reuse experiences across separate runs.
+
+Playwright powers browser automation, while LangChain provides the agent orchestration and LLM integration. The current implementation uses **OpenAI models through LangChain's `ChatOpenAI` integration and the OpenAI Responses API**, and depends on `OPENAI_API_KEY` environment variable.
 
 Matching vacancy URLs are printed to standard output.
 
@@ -21,8 +25,6 @@ The following command-line arguments are supported:
 - Mandatory `--keywords`: Job search keywords, such as `Software Engineer` or `Python Developer`.
 - Mandatory `--location`: Target job location, such as `Europe` or `Netherlands`.
 - Mandatory `--language`: Required vacancy language, such as `English`.
-- Optional `--model`: LLM model to use. Defaults to `gpt-5.4-mini`.
-- Optional `--provider`: LLM provider. Defaults to `openai`.
 
 ### Example
 
@@ -34,7 +36,7 @@ python cli.py \
   --language "English"
 ```
 
-Use a different model:
+<!-- Use a different model:
 
 ```bash 
 python cli.py \
@@ -44,7 +46,7 @@ python cli.py \
   --language "English" \
   --model "claude-sonnet-4-6" \
   --provider "anthropic"
-```
+``` -->
 
 ## Running as a Cron Job
 
