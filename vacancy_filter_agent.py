@@ -6,9 +6,11 @@ from tools import JobLink, MatchingVacancies
 class VacancyFilterAgent:
     """Identifies vacancies that semantically match the search criteria."""
 
-    def __init__(self, llm: BaseChatModel, keywords: str) -> None:
+    def __init__(self, llm: BaseChatModel, keywords: str, location: str, language: str) -> None:
         self.llm = llm
         self.keywords = keywords
+        self.location = location
+        self.language = language
 
         self.extractor = self.llm.with_structured_output(
             MatchingVacancies,
@@ -24,6 +26,8 @@ class VacancyFilterAgent:
 
         extract_prompt = f"""
         Search criteria: {self.keywords}
+        Preferred location: {self.location}
+        Preffered language: {self.language}
 
         Candidate vacancies:
         {[
@@ -31,7 +35,7 @@ class VacancyFilterAgent:
             for job in job_links
         ]}
 
-        Select every vacancy that matches the search criteria.
+        Select every vacancy that matches the search criteria, preferred location and language.
 
         Consider both direct keyword matches and contextual similarity.
         Do not return only the best match.
