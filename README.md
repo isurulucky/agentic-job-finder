@@ -54,7 +54,7 @@ python cli.py \
 The application can be scheduled as a cron job to periodically search careers websites for matching vacancies. For example, to run the search every day at 8:00 AM and append the output to a log file:
 
 ```bash
-0 8 * * * cd /absolute/path/to/project && /absolute/path/to/venv/bin/python cli.py --urls "https://www.coolblue.nl/en/vacancies,https://catawiki.careers/vacancies,https://careers.adyen.com/" --keywords "Software Engineer" --location "Europe" --language "English" >> /absolute/path/to/jobfinder.log 2>&1
+0 8 * * * cd /absolute/path/to/project && /absolute/path/to/venv/bin/python cli.py --urls "https://catawiki.careers/vacancies,https://careers.adyen.com/" --keywords "Software Engineer" --location "Europe" --language "English" --headless "True" >> /absolute/path/to/jobfinder.log 2>&1
 ```
 
 Tested with Python 3.11.
