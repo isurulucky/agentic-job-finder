@@ -25,6 +25,7 @@ The following command-line arguments are supported:
 - Mandatory `--keywords`: Job search keywords, such as `Software Engineer` or `Python Developer`.
 - Mandatory `--location`: Target job location, such as `Europe` or `Netherlands`.
 - Mandatory `--language`: Required vacancy language, such as `English`.
+- Optional `--headless`: Runs the browser in headless mode if specified as `True`. 
 
 ### Example
 
