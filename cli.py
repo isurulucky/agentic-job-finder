@@ -157,6 +157,8 @@ async def main() -> None:
     filtering_agent = VacancyFilterAgent(
         llm=llm,
         keywords=args.keywords,
+        location=args.location,
+        language=args.language,
     )
 
     job_links = await filtering_agent.run(filtered_links)
