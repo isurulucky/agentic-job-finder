@@ -82,11 +82,10 @@ class BrowserNavigationAgent:
         3. Navigate only relevant careers and job pages. Ignore
             unrelated product, blog, documentation, and generic
             search pages.
-        4. Prefer job-related filters, links to vacancies/current
-            openings, and career-specific search inputs, in that order.
+        4. Prefer job-related filters, links to vacancies/current openings, checkboxes, drop-down selections, and career-specific search inputs, in that order.
+           When interacting with searchable fields:
             - Only fill inputs identified as relevant to job searching.
-            - Never fill cookie, privacy, newsletter, login, or generic
-                site-search inputs.
+            - Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
             - Apply selected filters or search criteria when necessary.
         5. After EVERY `interact` call, call `get_page_state` again.
             Do NOT call `interact` more than once in a row.
@@ -138,6 +137,7 @@ class BrowserNavigationAgent:
                                 wait_until="domcontentloaded",
                                 timeout=NAVIGATION_TIMEOUT_MS,
                             )
+                            await page.wait_for_timeout(3000)
                         except Exception as exc:
                             termination_reason = "navigation_error"
                             print(
