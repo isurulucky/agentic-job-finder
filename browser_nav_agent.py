@@ -58,52 +58,6 @@ class BrowserNavigationAgent:
         self.language = language
         self.llm = llm
 
-    # def _build_system_prompt(self, experiences) -> str:
-    #     return f"""
-    #     You are an autonomous browser agent tasked with discovering
-    #     job vacancy URLs.
-
-    #     Search criteria:
-    #     - Keywords: "{self.keywords}"
-    #     - Location: "{self.location}"
-    #     - Language: "{self.language}"
-
-    #     Previous navigation experiences:
-    #     {experiences}
-
-    #     Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat.
-    #     Minimize unnecessary interactions and prioritize actions that
-    #     help discover vacancy URLs.
-
-    #     Rules:
-    #     1. ALWAYS call `get_page_state` before acting.
-    #     2. Remove consent forms, cookie banners, modals, and other
-    #         blockers when necessary.
-    #     3. Navigate only relevant careers and job pages. Ignore
-    #         unrelated product, blog, documentation, and generic
-    #         search pages.
-    #     4. Prefer job-related filters, links to vacancies/current openings, checkboxes, drop-down selections, and career-specific search inputs, in that order.
-    #        When interacting with searchable fields:
-    #         - Only fill inputs identified as relevant to job searching.
-    #         - Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
-    #         - Apply selected filters or search criteria when necessary.
-    #     5. After EVERY `interact` call, call `get_page_state` again.
-    #         Do NOT call `interact` more than once in a row.
-    #     6. Base actions on the current observed state. Avoid arbitrary
-    #         clicks, repeated ineffective actions, and navigation loops.
-    #     7. Use the search criteria to guide navigation and available
-    #         filtering, but do NOT perform semantic vacancy matching.
-    #     8. Once navigation and filtering are complete, call
-    #         `extract_urls` to collect all candidate vacancy URLs and
-    #         their visible link text.
-    #     9. Use previous navigation experiences as guidance, not as fixed action sequences.
-    #         - Prefer experiences relevant to the current website and page structure.
-    #         - Adapt previously successful strategies to the current observed state.
-    #         - Do not blindly repeat actions, selectors, or navigation paths from previous experiences.
-    #         - If previous experiences are unavailable or irrelevant, rely on your own reasoning.
-    #     10. Verify the outcome of every action against the current page state.
-    #         If a previously successful strategy fails, abandon it and choose an alternative based on the current observations.
-    # """
     def _build_system_prompt(self, experiences) -> str:
         return f"""
         You are an autonomous browser agent responsible for discovering
@@ -120,35 +74,26 @@ class BrowserNavigationAgent:
         Use the following approach:
 
         1. OBSERVE: Always call `get_page_state` before deciding what to do.
-        2. DECIDE: Identify the most relevant next action based on the current
-        page state and search criteria.
-        3. ACT: Use `interact` to navigate the website or apply relevant
-        job-search filters. Avoid unrelated inputs and interactions.
-        4. VERIFY: After every `interact` call, call `get_page_state` to
-        verify the outcome. Never call `interact` twice consecutively.
+        2. DECIDE: Prioritise the next applicable successful interaction from previous experiences. Otherwise, choose the best action based on the current page state and search criteria.        
+        3. ACT: Use `interact` to navigate the website or apply relevant job-search filters. Avoid unrelated inputs and interactions.
+        4. VERIFY: After every `interact` call, call `get_page_state` to verify the outcome. Never call `interact` twice consecutively.
 
         Navigation guidelines:
         - Focus on careers pages, job listings, and vacancy search interfaces.
         - Dismiss cookie banners, consent forms, and other blockers when necessary.
         - Prefer job-related filters and vacancy links over unnecessary navigation.
-        - Avoid unrelated pages, arbitrary clicks, repeated ineffective actions,
-        and navigation loops.
+        - Avoid unrelated pages, arbitrary clicks, repeated ineffective actions, and navigation loops.
         - Use the search criteria to guide navigation and available filtering.
-        Do not perform semantic vacancy matching.
 
         Using previous experiences:
-        - Treat previous experiences as reusable knowledge about successful
-        navigation strategies and their outcomes.
-        - Use relevant experiences to identify promising navigation paths,
-        filters, and interactions.
-        - Adapt those strategies to the current page state rather than
-        blindly repeating recorded actions or selectors.
-        - Avoid strategies that previously failed, unless the current page
-        provides a reason to try a different approach.
-        - If no relevant experiences exist, navigate using your own reasoning.
+        - Consider ONLY interactions with "success": true.
+        - Prioritise relevant previous experiences and follow their recorded interaction order.
+        - Before each interaction, verify that the element exists in the current page state.
+        - Adapt interactions using the current state_version and state_id.
+        - Skip unavailable elements and continue with the remaining interactions.
+        - If no relevant successful experiences exist, navigate using your own reasoning.
 
-        Once navigation and filtering are complete, call `extract_urls`
-        to collect candidate vacancy URLs and their visible link text.
+        Once navigation and filtering are complete, call `extract_urls` to collect candidate vacancy URLs and their visible link text.
         """
 
     async def run(
@@ -171,6 +116,9 @@ class BrowserNavigationAgent:
                     site_candidates: dict[str, JobLink] = {}
                     navigation_steps: list[dict] = []
 
+                    # Tracks the most recently retrieved page state.
+                    current_page_state = {}
+
                     try:
                         context = await browser.new_context()
                         page = await context.new_page()
@@ -184,8 +132,10 @@ class BrowserNavigationAgent:
                                 timeout=NAVIGATION_TIMEOUT_MS,
                             )
                             await page.wait_for_timeout(3000)
+
                         except Exception as exc:
                             termination_reason = "navigation_error"
+
                             print(
                                 f"[!] Page load error for "
                                 f"{target_url}: {exc}"
@@ -228,7 +178,10 @@ class BrowserNavigationAgent:
                         ]
 
                         llm_with_tools = self.llm.bind_tools(tools)
-                        tools_map = {tool.name: tool for tool in tools}
+                        tools_map = {
+                            tool.name: tool
+                            for tool in tools
+                        }
 
                         known_experiences = (experiences or {}).get(
                             target_url,
@@ -270,8 +223,10 @@ class BrowserNavigationAgent:
 
                             try:
                                 ai_msg = await llm_with_tools.ainvoke(messages)
+
                             except Exception as exc:
                                 termination_reason = "model_error"
+
                                 print(
                                     f"[!] Model invocation failed for "
                                     f"{target_url}: {exc}"
@@ -282,6 +237,7 @@ class BrowserNavigationAgent:
 
                             if not ai_msg.tool_calls:
                                 termination_reason = "agent_stopped"
+
                                 print(
                                     "[*] Agent stopped calling tools. "
                                     f"Response: {ai_msg.content}"
@@ -328,12 +284,72 @@ class BrowserNavigationAgent:
                                     )
                                     continue
 
+                                # Resolve the element name using the latest
+                                # page state before executing an interaction.
+                                element_name = ""
+                                interaction_description = ""
+
+                                if tool_name == "interact":
+                                    state_id = tool_args.get("state_id")
+                                    action = tool_args.get("action", "")
+                                    value = tool_args.get("value", "")
+
+                                    elements = current_page_state.get(
+                                        "elements",
+                                        [],
+                                    )
+
+                                    element_name = next(
+                                        (
+                                            element.get("name", "")
+                                            for element in elements
+                                            if element.get("state_id") == state_id
+                                        ),
+                                        f"Unknown element (state_id={state_id})",
+                                    )
+
+                                    if action == "click":
+                                        interaction_description = "Click"
+
+                                    elif action == "fill":
+                                        interaction_description = (
+                                            f"Enter text: {value}"
+                                        )
+
+                                    elif action == "check":
+                                        interaction_description = "Check"
+
+                                    elif action == "select":
+                                        interaction_description = (
+                                            f"Select option: {value}"
+                                        )
+
+                                    else:
+                                        interaction_description = str(action)
+
                                 try:
                                     tool_result = await chosen_tool.ainvoke(
                                         tool_args
                                     )
 
-                                    if tool_name == "extract_urls":
+                                    if tool_name == "get_page_state":
+                                        # Save the latest page state so that
+                                        # state IDs can be mapped to element names.
+                                        current_page_state = tool_result
+
+                                    elif tool_name == "interact":
+                                        # Record the actual interaction outcome.
+                                        navigation_steps.append(
+                                            {
+                                                "element": element_name,
+                                                "interaction": interaction_description,
+                                                "success": bool(
+                                                    tool_result.get("success", False)
+                                                ),
+                                            }
+                                        )
+
+                                    elif tool_name == "extract_urls":
                                         extracted_links = _normalize_job_links(
                                             tool_result
                                         )
@@ -342,17 +358,17 @@ class BrowserNavigationAgent:
                                             site_candidates[job_link.url] = job_link
 
                                         tool_result = extracted_links
+
+                                        navigation_steps.append(
+                                            {
+                                                "element": "Vacancy listing",
+                                                "interaction": "Extract vacancy links",
+                                                "success": bool(extracted_links),
+                                            }
+                                        )
+
                                         extraction_completed = True
                                         termination_reason = "extraction_complete"
-
-                                    navigation_steps.append(
-                                        {
-                                            "tool": tool_name,
-                                            "arguments": tool_args,
-                                            "success": True,
-                                            "result_summary": str(tool_result)[:1000],
-                                        }
-                                    )
 
                                     tool_response = {
                                         "success": True,
@@ -365,14 +381,24 @@ class BrowserNavigationAgent:
                                         f"{target_url}, tool={tool_name}: {exc}"
                                     )
 
-                                    navigation_steps.append(
-                                        {
-                                            "tool": tool_name,
-                                            "arguments": tool_args,
-                                            "success": False,
-                                            "error": str(exc),
-                                        }
-                                    )
+                                    # Record failed interactions.
+                                    if tool_name == "interact":
+                                        navigation_steps.append(
+                                            {
+                                                "element": element_name,
+                                                "interaction": interaction_description,
+                                                "success": False,
+                                            }
+                                        )
+
+                                    elif tool_name == "extract_urls":
+                                        navigation_steps.append(
+                                            {
+                                                "element": "Vacancy listing",
+                                                "interaction": "Extract vacancy links",
+                                                "success": False,
+                                            }
+                                        )
 
                                     tool_response = {
                                         "success": False,
@@ -420,6 +446,7 @@ class BrowserNavigationAgent:
 
                     except Exception as exc:
                         termination_reason = "site_error"
+
                         print(
                             f"[!] Failed to process {target_url}: {exc}"
                         )
@@ -445,6 +472,7 @@ class BrowserNavigationAgent:
                         if context is not None:
                             try:
                                 await context.close()
+
                             except Exception as exc:
                                 print(
                                     f"[!] Failed to close context for "
