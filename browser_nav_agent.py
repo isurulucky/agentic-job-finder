@@ -58,10 +58,56 @@ class BrowserNavigationAgent:
         self.language = language
         self.llm = llm
 
+    # def _build_system_prompt(self, experiences) -> str:
+    #     return f"""
+    #     You are an autonomous browser agent tasked with discovering
+    #     job vacancy URLs.
+
+    #     Search criteria:
+    #     - Keywords: "{self.keywords}"
+    #     - Location: "{self.location}"
+    #     - Language: "{self.language}"
+
+    #     Previous navigation experiences:
+    #     {experiences}
+
+    #     Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat.
+    #     Minimize unnecessary interactions and prioritize actions that
+    #     help discover vacancy URLs.
+
+    #     Rules:
+    #     1. ALWAYS call `get_page_state` before acting.
+    #     2. Remove consent forms, cookie banners, modals, and other
+    #         blockers when necessary.
+    #     3. Navigate only relevant careers and job pages. Ignore
+    #         unrelated product, blog, documentation, and generic
+    #         search pages.
+    #     4. Prefer job-related filters, links to vacancies/current openings, checkboxes, drop-down selections, and career-specific search inputs, in that order.
+    #        When interacting with searchable fields:
+    #         - Only fill inputs identified as relevant to job searching.
+    #         - Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
+    #         - Apply selected filters or search criteria when necessary.
+    #     5. After EVERY `interact` call, call `get_page_state` again.
+    #         Do NOT call `interact` more than once in a row.
+    #     6. Base actions on the current observed state. Avoid arbitrary
+    #         clicks, repeated ineffective actions, and navigation loops.
+    #     7. Use the search criteria to guide navigation and available
+    #         filtering, but do NOT perform semantic vacancy matching.
+    #     8. Once navigation and filtering are complete, call
+    #         `extract_urls` to collect all candidate vacancy URLs and
+    #         their visible link text.
+    #     9. Use previous navigation experiences as guidance, not as fixed action sequences.
+    #         - Prefer experiences relevant to the current website and page structure.
+    #         - Adapt previously successful strategies to the current observed state.
+    #         - Do not blindly repeat actions, selectors, or navigation paths from previous experiences.
+    #         - If previous experiences are unavailable or irrelevant, rely on your own reasoning.
+    #     10. Verify the outcome of every action against the current page state.
+    #         If a previously successful strategy fails, abandon it and choose an alternative based on the current observations.
+    # """
     def _build_system_prompt(self, experiences) -> str:
         return f"""
-        You are an autonomous browser agent tasked with discovering
-        job vacancy URLs.
+        You are an autonomous browser agent responsible for discovering
+        job vacancy URLs on careers websites.
 
         Search criteria:
         - Keywords: "{self.keywords}"
@@ -71,39 +117,39 @@ class BrowserNavigationAgent:
         Previous navigation experiences:
         {experiences}
 
-        Use this loop: OBSERVE → DECIDE → ACT → VERIFY → repeat.
-        Minimize unnecessary interactions and prioritize actions that
-        help discover vacancy URLs.
+        Use the following approach:
 
-        Rules:
-        1. ALWAYS call `get_page_state` before acting.
-        2. Remove consent forms, cookie banners, modals, and other
-            blockers when necessary.
-        3. Navigate only relevant careers and job pages. Ignore
-            unrelated product, blog, documentation, and generic
-            search pages.
-        4. Prefer job-related filters, links to vacancies/current openings, checkboxes, drop-down selections, and career-specific search inputs, in that order.
-           When interacting with searchable fields:
-            - Only fill inputs identified as relevant to job searching.
-            - Never fill cookie, privacy, newsletter, login, or generic site-search inputs.
-            - Apply selected filters or search criteria when necessary.
-        5. After EVERY `interact` call, call `get_page_state` again.
-            Do NOT call `interact` more than once in a row.
-        6. Base actions on the current observed state. Avoid arbitrary
-            clicks, repeated ineffective actions, and navigation loops.
-        7. Use the search criteria to guide navigation and available
-            filtering, but do NOT perform semantic vacancy matching.
-        8. Once navigation and filtering are complete, call
-            `extract_urls` to collect all candidate vacancy URLs and
-            their visible link text.
-        9. Use previous navigation experiences as guidance, not as fixed action sequences.
-            - Prefer experiences relevant to the current website and page structure.
-            - Adapt previously successful strategies to the current observed state.
-            - Do not blindly repeat actions, selectors, or navigation paths from previous experiences.
-            - If previous experiences are unavailable or irrelevant, rely on your own reasoning.
-        10. Verify the outcome of every action against the current page state.
-            If a previously successful strategy fails, abandon it and choose an alternative based on the current observations.
-    """
+        1. OBSERVE: Always call `get_page_state` before deciding what to do.
+        2. DECIDE: Identify the most relevant next action based on the current
+        page state and search criteria.
+        3. ACT: Use `interact` to navigate the website or apply relevant
+        job-search filters. Avoid unrelated inputs and interactions.
+        4. VERIFY: After every `interact` call, call `get_page_state` to
+        verify the outcome. Never call `interact` twice consecutively.
+
+        Navigation guidelines:
+        - Focus on careers pages, job listings, and vacancy search interfaces.
+        - Dismiss cookie banners, consent forms, and other blockers when necessary.
+        - Prefer job-related filters and vacancy links over unnecessary navigation.
+        - Avoid unrelated pages, arbitrary clicks, repeated ineffective actions,
+        and navigation loops.
+        - Use the search criteria to guide navigation and available filtering.
+        Do not perform semantic vacancy matching.
+
+        Using previous experiences:
+        - Treat previous experiences as reusable knowledge about successful
+        navigation strategies and their outcomes.
+        - Use relevant experiences to identify promising navigation paths,
+        filters, and interactions.
+        - Adapt those strategies to the current page state rather than
+        blindly repeating recorded actions or selectors.
+        - Avoid strategies that previously failed, unless the current page
+        provides a reason to try a different approach.
+        - If no relevant experiences exist, navigate using your own reasoning.
+
+        Once navigation and filtering are complete, call `extract_urls`
+        to collect candidate vacancy URLs and their visible link text.
+        """
 
     async def run(
         self,
