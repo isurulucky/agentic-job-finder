@@ -2,9 +2,9 @@ import argparse
 import asyncio
 from datetime import date
 from langchain.chat_models import init_chat_model
-from langchain_openai import ChatOpenAI
 
 from browser_nav_agent import BrowserNavigationAgent
+from model_factory import create_llm
 from nav_experience_store import NavExperienceStore
 from vacancy_filter_agent import VacancyFilterAgent
 from url_finder import find_candidate_urls, identify_framework
@@ -67,11 +67,7 @@ async def main() -> None:
     if not target_urls:
         raise SystemExit("Error: provide at least one vacancy site URL.")
 
-    llm = ChatOpenAI(
-        model=args.model,
-        reasoning={"effort": "medium"},
-        use_responses_api=True,
-    )
+    llm = create_llm(args.provider, args.model)
 
     experience_store = NavExperienceStore()
 
