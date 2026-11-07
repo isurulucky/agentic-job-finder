@@ -86,14 +86,14 @@ class BrowserNavigationAgent:
         - Use the search criteria to guide navigation and available filtering.
 
         Using previous experiences:
-        - Consider ONLY interactions with "success": true.
+        - Consider ONLY interactions which are flagged as successful.
         - Prioritise relevant previous experiences and follow their recorded interaction order.
         - Before each interaction, verify that the element exists in the current page state.
         - Adapt interactions using the current state_version and state_id.
         - Skip unavailable elements and continue with the remaining interactions.
         - If no relevant successful experiences exist, navigate using your own reasoning.
 
-        Once navigation and filtering are complete, call `extract_urls` to collect candidate vacancy URLs and their visible link text.
+        Once navigation and filtering are complete, collect candidate vacancy URLs and their visible link text.
         """
 
     async def run(
