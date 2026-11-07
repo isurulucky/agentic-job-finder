@@ -4,9 +4,11 @@ from playwright.async_api import Page
 from langchain_core.language_models.chat_models import BaseChatModel
 from url_finder import find_candidate_urls
 
+
 class JobLink(BaseModel):
     url: str = Field(description="The full URL of the job vacancy.")
-    text: str = Field(description="The visible anchor text or title of the vacancy link.") 
+    text: str = Field(description="The visible anchor text or title of the vacancy link.")
+
 
 class BrowserTools:
     def __init__(self, page: Page, llm: BaseChatModel, keywords: str):
@@ -17,48 +19,36 @@ class BrowserTools:
         self.state_valid = False
 
     async def get_page_state(self) -> dict:
-        """Retrieves the current page state and assigns versioned element state IDs.
+        """Retrieves the current page state and assigns versioned element IDs.
 
-        Increments `self.state_version` and evaluates page state in the browser context,
-        annotating visible interactive elements with a `state-id` DOM attribute.
+        Increments self.state_version and evaluates page state in the browser
+        context, annotating visible interactive elements with an
+        'element-id' DOM attribute.
 
         Returns:
-        dict: A dictionary with the following structure:
+            dict: A dictionary with the following structure:
 
-        ```
             {
                 "state_version": 1,
                 "url": "https://example.com/page",
                 "title": "Page Title",
                 "elements": [
                     {
-                    "state_id": 1,
-                    "type": "button" | "dropdown" | "checkbox" | "radio" | "text_input" | "link",
-                    "name": "Submit",
-                    "disabled": false,
-                    "href": "https://example.com/link",
-                    "value": "",
-                    "placeholder": "Enter email...",
-                    "checked": false,
-                    "options": [
-                        {
-                        "name": "Option Label",
-                        "value": "opt_val",
-                        "selected": true
-                        }
-                    ]
+                        "element_id": 1,
+                        "type": "button",
+                        "name": "Submit",
+                        "disabled": false
                     }
                 ]
             }
-            Element `state_id`s are only valid for the returned `state_version`.
+
+            The `element_id`s are only valid for the returned state_version.
 
             Type-specific properties:
-            - `href`: present for links.
-            - `value`, `placeholder`: present for text inputs.
-            - `checked`: present for checkboxes and radio buttons.
-            - `options`: present for dropdowns; contains at most 30 options.
-        ```
-
+            - href: present for links.
+            - value, placeholder: present for text inputs.
+            - checked: present for checkboxes and radio buttons.
+            - options: present for dropdowns; contains at most 30 options.
         """
 
         self.state_version += 1
@@ -176,22 +166,22 @@ class BrowserTools:
 
             const interactive = [];
 
-            let stateId = 1;
+            let elementId = 1;
 
             const addElement = (el, type, extra = {}) => {
                 if (!isVisible(el)) return;
 
-                el.setAttribute('state-id', stateId);
+                el.setAttribute('element-id', elementId);
 
                 interactive.push({
-                    state_id: stateId,
+                    element_id: elementId,
                     type: type,
                     name: getName(el),
                     disabled: !!el.disabled,
                     ...extra
                 });
 
-                stateId++;
+                elementId++;
             };
 
             /*
@@ -322,27 +312,27 @@ class BrowserTools:
     async def interact(
         self,
         state_version: int,
-        state_id: int,
+        element_id: int,
         action: str,
         value: str = ""
     ) -> dict:
         """
         Interacts with an element from the current page state.
 
-        `state_id` is only valid for the specified `state_version`.
+        element_id is only valid for the specified state_version.
 
         Args:
-            state_version: Page state version associated with `state_id`.
-            state_id: ID of the element to interact with.
-            action: Action to perform: `click`, `fill`, `check`, or `select`.
-            value: Value used by `fill` or `select`.
+            state_version: Page state version associated with element_id.
+            element_id: ID of the element to interact with.
+            action: Action to perform: click, fill, check, or select.
+            value: Value used by fill or select.
 
         Returns:
             dict: A dictionary with the following structure:
 
                 {
                     "success": true,
-                    "state_id": 1,
+                    "element_id": 1,
                     "action": "click",
                     "navigation": {
                         "from": "https://example.com",
@@ -353,21 +343,21 @@ class BrowserTools:
                     "next_step": "get_page_state"
                 }
 
-            On failure, `success` is false and `error`/`message` describe the
+            On failure, success is false and error/message describe the
             failure. Fields not applicable to the outcome are null.
 
-            Possible error codes include `STALE_STATE`, `ELEMENT_NOT_FOUND`,
-            `NOT_NATIVE_SELECT`, `INVALID_ACTION`, and `INTERACTION_FAILED`.
+            Possible error codes include STALE_STATE, ELEMENT_NOT_FOUND,
+            NOT_NATIVE_SELECT, INVALID_ACTION, and INTERACTION_FAILED.
 
-            `next_step` instructs the agent which tool to call next and is
-            always `get_page_state`.
+            next_step instructs the agent which tool to call next and is
+            always get_page_state.
         """
 
         # Reject stale state.
         if state_version != self.state_version or not self.state_valid:
             return {
                 "success": False,
-                "state_id": state_id,
+                "element_id": element_id,
                 "action": action,
                 "navigation": None,
                 "error": "STALE_STATE",
@@ -379,7 +369,7 @@ class BrowserTools:
             }
 
         locator = self.page.locator(
-            f"[state-id='{state_id}']"
+            f"[element-id='{element_id}']"
         ).first
 
         target = await locator.evaluate("""
@@ -408,7 +398,7 @@ class BrowserTools:
 
         print(
             f"\n[*] Interacting "
-            f"| state={state_version}:{state_id} "
+            f"| state={state_version}:{element_id} "
             f"| action={action.upper()} "
             f"| target='{target}' "
             f"| value='{value}'"
@@ -418,12 +408,12 @@ class BrowserTools:
             if await locator.count() == 0 or not await locator.is_visible():
                 return {
                     "success": False,
-                    "state_id": state_id,
+                    "element_id": element_id,
                     "action": action,
                     "navigation": None,
                     "error": "ELEMENT_NOT_FOUND",
                     "message": (
-                        f"State ID {state_id} was not found."
+                        f"Element ID {element_id} was not found."
                     ),
                     "next_step": "get_page_state"
                 }
@@ -446,7 +436,7 @@ class BrowserTools:
                 ) != "select":
                     return {
                         "success": False,
-                        "state_id": state_id,
+                        "element_id": element_id,
                         "action": action,
                         "navigation": None,
                         "error": "NOT_NATIVE_SELECT",
@@ -464,7 +454,7 @@ class BrowserTools:
             else:
                 return {
                     "success": False,
-                    "state_id": state_id,
+                    "element_id": element_id,
                     "action": action,
                     "navigation": None,
                     "error": "INVALID_ACTION",
@@ -480,7 +470,7 @@ class BrowserTools:
 
             return {
                 "success": True,
-                "state_id": state_id,
+                "element_id": element_id,
                 "action": action,
                 "navigation": (
                     {
@@ -500,22 +490,22 @@ class BrowserTools:
 
             return {
                 "success": False,
-                "state_id": state_id,
+                "element_id": element_id,
                 "action": action,
                 "navigation": None,
                 "error": "INTERACTION_FAILED",
                 "message": (
                     f"Failed to perform '{action}' "
-                    f"on state_id {state_id}: {str(e)}"
+                    f"on element_id {element_id}: {str(e)}"
                 ),
                 "next_step": "get_page_state"
             }
-        
+
     async def extract_urls(self) -> list[JobLink]:
         """Extract all visible links from the current page with their text and URL.
-        
-            Returns:
-                dict[str, str]: dictionary with with their URL (key) and visible text (value).
+
+        Returns:
+            list[JobLink]: Vacancy links with their URL and visible text.
         """
 
         print("\n[*] Extracting links directly from DOM...")
@@ -539,6 +529,7 @@ class BrowserTools:
                 );
         }
         """
+
         raw_links = await self.page.evaluate(js_extract)
 
         # Deduplicate by URL
@@ -562,65 +553,70 @@ class BrowserTools:
 
         # Convert to JobLink instances
         job_links = [
-            JobLink(url=link["url"], text=link["text"]) for link in links
+            JobLink(url=link["url"], text=link["text"])
+            for link in links
         ]
 
         print(f"\n[*] Extracted {len(job_links)} matching links.")
 
         return job_links
 
+
 class MatchingVacancies(BaseModel):
     job_links: list[JobLink] = Field(
-        description="All job vacancies matching the user's criteria. "
-                    "Include every relevant vacancy, not just the best match."
+        description=(
+            "All job vacancies matching the user's criteria. "
+            "Include every relevant vacancy, not just the best match."
+        )
     )
+
 
 class FilteringTools:
     def __init__(self, llm: BaseChatModel, keywords: str):
         self.llm = llm
         self.keywords = keywords
 
-    async def list_matching_vacancies(self, jobLinks: list[JobLink]) -> list[JobLink]:
-            """Identifies job vacancy URLs matching the specified keywords.
+    async def list_matching_vacancies(
+        self,
+        jobLinks: list[JobLink]
+    ) -> list[JobLink]:
+        """Identifies job vacancy URLs matching the specified keywords.
 
+        Args:
+            jobLinks: List of unfiltered JobLink instances for discovered URLs.
+            llm: Language model used to identify semantically matching vacancies.
+            keywords: Keywords describing the desired vacancies.
 
-                Args:
-                jobLinks: List of unfiltered JobLink instances for discovered URLs.
-                llm: Language model used to identify semantically matching vacancies.
-                keywords: Keywords describing the desired vacancies.
+        Returns:
+            list[JobLink]: JobLink instances corresponding to specific job
+            vacancies that semantically match the keywords, with their
+            visible link text. Returns an empty list if no matching
+            vacancies are found.
+        """
 
-                Returns:
-                list[job_links]: List of JobLink instances corresponding to specific job vacancies that
-                semantically match the keywords, with their visible link text.
-                Returns an empty list if no matching vacancies are found.
-            """
+        if len(jobLinks) == 0:
+            # No URLs passed
+            print("Zero extracted URLs, no matching vacancies")
+            return jobLinks
 
-            if len(jobLinks) == 0:
-                # No URLs passed
-                print("Zero extracted URLs, no matching vacancies")
-                return jobLinks
+        # Ask LLM to pick ONLY job vacancy URLs from the clean list
+        extract_prompt = f"""
+        Search criteria: {self.keywords}
 
-            # print(f"Input vacancy count: {len(jobLinks)}")
+        Candidate vacancies:
+        {jobLinks}
 
-            # for job in jobLinks:
-            #     print(f"INPUT: {job.url} | {job.text[:100]}")
-            
-            # Ask LLM to pick ONLY job vacancy URLs from the clean list
-            extract_prompt = f"""
-            Search criteria: {self.keywords}
+        Return every vacancy related to software development.
+        Return all matching vacancies in the job_links list using search
+        criteria for direct keyword matches and contextual similarity.
+        Do not return only the best match.
+        """
 
-            Candidate vacancies:
-            {jobLinks}
+        extractor = self.llm.with_structured_output(
+            MatchingVacancies,
+            method="json_schema",
+        )
 
-            Return every vacancy related to software development.
-            Return all matching vacancies in the job_links list using search criteria for direct keyword matches and contexual similarity.
-            Do not return only the best match.
-            """
-            
-            extractor = self.llm.with_structured_output(
-                MatchingVacancies,
-                method="json_schema",
-            )        
-            result = extractor.invoke(extract_prompt)
+        result = extractor.invoke(extract_prompt)
 
-            return result.job_links
+        return result.job_links

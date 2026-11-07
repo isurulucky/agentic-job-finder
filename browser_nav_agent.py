@@ -89,7 +89,7 @@ class BrowserNavigationAgent:
         - Consider ONLY interactions which are flagged as successful.
         - Prioritise relevant previous experiences and follow their recorded interaction order.
         - Before each interaction, verify that the element exists in the current page state.
-        - Adapt interactions using the current state_version and state_id.
+        - Adapt interactions using the current `state_version` and `element_id`.
         - Skip unavailable elements and continue with the remaining interactions.
         - If no relevant successful experiences exist, navigate using your own reasoning.
 
@@ -290,7 +290,7 @@ class BrowserNavigationAgent:
                                 interaction_description = ""
 
                                 if tool_name == "interact":
-                                    state_id = tool_args.get("state_id")
+                                    element_id = tool_args.get("element_id")
                                     action = tool_args.get("action", "")
                                     value = tool_args.get("value", "")
 
@@ -303,9 +303,9 @@ class BrowserNavigationAgent:
                                         (
                                             element.get("name", "")
                                             for element in elements
-                                            if element.get("state_id") == state_id
+                                            if element.get("element_id") == element_id
                                         ),
-                                        f"Unknown element (state_id={state_id})",
+                                        f"Unknown element (element_id={element_id})",
                                     )
 
                                     if action == "click":
