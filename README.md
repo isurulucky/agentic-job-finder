@@ -8,7 +8,7 @@ The application uses a **multi-agent architecture** with specialized agents for 
 
 Navigation experiences are currently stored in a local SQL database using SQLite. This lightweight persistence mechanism allows the application to retain and reuse experiences across separate runs.
 
-Playwright powers browser automation, while LangChain provides the agent orchestration and LLM integration. The current implementation uses **OpenAI models through LangChain's `ChatOpenAI` integration and the OpenAI Responses API**, and depends on `OPENAI_API_KEY` environment variable.
+Playwright powers browser automation, while LangChain provides the agent orchestration and LLM integration. The current implementation Supports multiple reasoning-model providers, including OpenAI, Anthropic, and Google Gemini, through a unified LangChain interface.
 
 Matching vacancy URLs are printed to standard output.
 
@@ -33,21 +33,23 @@ The following command-line arguments are supported:
 python cli.py \
   --urls "https://www.coolblue.nl/en/vacancies,https://catawiki.careers/vacancies,https://careers.adyen.com/" \
   --keywords "Software Engineer" \
-  --location "Europe" \
+  --location "Netherlands" \
   --language "English"
 ```
 
-<!-- Use a different model:
+Use a different model:
 
 ```bash 
 python cli.py \
   --urls "https://careers.example.com" \
   --keywords "Python Developer" \
-  --location "Netherlands" \
+  --location "Europe" \
   --language "English" \
   --model "claude-sonnet-4-6" \
   --provider "anthropic"
-``` -->
+```
+
+This requires environment variable `ANTHROPIC_API_KEY` to be set. 
 
 ## Running as a Cron Job
 
