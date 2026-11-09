@@ -96,7 +96,7 @@ class BrowserNavigationAgent:
         - Skip unavailable elements and continue with the remaining interactions.
         - If no relevant successful experiences exist, navigate using your own reasoning.
 
-        Once navigation and filtering are complete, collect candidate vacancy URLs and their visible link text.
+        Once navigation and filtering are complete, collect candidate vacancy URLs and their visible link text by calling `{self._extract_urls_tool}`.
         """
 
     async def run(
