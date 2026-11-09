@@ -11,11 +11,9 @@ class JobLink(BaseModel):
 
 
 class BrowserTools:
-    def __init__(self, page: Page, llm: BaseChatModel, keywords: str):
+    def __init__(self, page: Page):
         self.page = page
-        self.llm = llm
         self.state_version = 0
-        self.keywords = keywords
         self.state_valid = False
 
     async def get_page_state(self) -> dict:

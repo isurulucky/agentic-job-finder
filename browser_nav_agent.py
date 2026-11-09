@@ -3,16 +3,13 @@ import json
 
 from playwright.async_api import async_playwright
 
-from langchain.chat_models import init_chat_model, BaseChatModel
+from langchain.chat_models import BaseChatModel
 from langchain_core.tools import StructuredTool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from tools import BrowserTools, JobLink
-
-
-MAX_ITERATIONS = 15
-NAVIGATION_TIMEOUT_MS = 30_000
+from nav_result import WebsiteNavigationResult, normalize_job_links
 
 
 def _serialize_default(obj: object) -> object:
@@ -24,26 +21,6 @@ def _serialize_default(obj: object) -> object:
         f"Object of type {type(obj).__name__} is not JSON serializable"
     )
 
-
-def _normalize_job_links(result: object) -> list[JobLink]:
-    """Validate and normalize a list of job vacancy links."""
-    if not isinstance(result, list):
-        raise TypeError(
-            f"Expected a list of JobLink objects, got {type(result).__name__}"
-        )
-
-    return [
-        item if isinstance(item, JobLink) else JobLink.model_validate(item)
-        for item in result
-    ]
-
-class WebsiteNavigationResult(BaseModel):
-    url: str
-    job_links: list[JobLink] = Field(default_factory=list)
-    experience: dict = Field(default_factory=dict)
-    result_count: int = 0
-    termination_reason: str = "unknown"
-
 class BrowserNavigationAgent:
     """Navigate careers websites and extract candidate vacancy URLs."""
     def __init__(
@@ -52,11 +29,16 @@ class BrowserNavigationAgent:
         location: str,
         language: str,
         llm:  BaseChatModel,
+        max_iterations: int = 15,
+        navigation_timeout_millis: int = 30_000
+
     ) -> None:
         self.keywords = keywords
         self.location = location
         self.language = language
         self.llm = llm
+        self.max_iterations = max_iterations
+        self.navigation_timeout_millis = navigation_timeout_millis
         self._page_state_tool = "get_page_state"
         self._interact_tool = "interact"
         self._extract_urls_tool = "extract_urls"
@@ -132,7 +114,7 @@ class BrowserNavigationAgent:
                             await page.goto(
                                 target_url,
                                 wait_until="domcontentloaded",
-                                timeout=NAVIGATION_TIMEOUT_MS,
+                                timeout=self.navigation_timeout_millis,
                             )
                             await page.wait_for_timeout(3000)
 
@@ -158,11 +140,7 @@ class BrowserNavigationAgent:
                             )
                             continue
 
-                        browser_tools = BrowserTools(
-                            page,
-                            self.llm,
-                            self.keywords,
-                        )
+                        browser_tools = BrowserTools(page)
 
                         # This agent handles navigation and URL extraction only.
                         tools = [
@@ -218,10 +196,10 @@ class BrowserNavigationAgent:
 
                         extraction_completed = False
 
-                        for iteration in range(MAX_ITERATIONS):
+                        for iteration in range(self.max_iterations):
                             print(
                                 f"\n--- Iteration "
-                                f"{iteration + 1}/{MAX_ITERATIONS} ---"
+                                f"{iteration + 1}/{self.max_iterations} ---"
                             )
 
                             try:
@@ -287,9 +265,10 @@ class BrowserNavigationAgent:
                                     )
                                     continue
 
-                                # Resolve the element name using the latest
+                                # Resolve the element name and type using the latest
                                 # page state before executing an interaction.
                                 element_name = ""
+                                element_type = ""
                                 interaction_description = ""
 
                                 if tool_name == self._interact_tool:
@@ -297,36 +276,31 @@ class BrowserNavigationAgent:
                                     action = tool_args.get("action", "")
                                     value = tool_args.get("value", "")
 
-                                    elements = current_page_state.get(
-                                        "elements",
-                                        [],
-                                    )
+                                    elements = current_page_state.get("elements", [])
 
-                                    element_name = next(
+                                    matched_element = next(
                                         (
-                                            element.get("name", "")
+                                            element
                                             for element in elements
                                             if element.get("element_id") == element_id
                                         ),
-                                        f"Unknown element (element_id={element_id})",
+                                        None,
                                     )
+
+                                    if matched_element:
+                                        element_name = matched_element.get("name", "")
+                                        element_type = matched_element.get("type", "")
+                                    else:
+                                        element_name = f"Unknown element (element_id={element_id})"
 
                                     if action == "click":
                                         interaction_description = "Click"
-
                                     elif action == "fill":
-                                        interaction_description = (
-                                            f"Enter text: {value}"
-                                        )
-
+                                        interaction_description = f"Enter text: {value}"
                                     elif action == "check":
                                         interaction_description = "Check"
-
                                     elif action == "select":
-                                        interaction_description = (
-                                            f"Select option: {value}"
-                                        )
-
+                                        interaction_description = f"Select option: {value}"
                                     else:
                                         interaction_description = str(action)
 
@@ -345,6 +319,7 @@ class BrowserNavigationAgent:
                                         navigation_steps.append(
                                             {
                                                 "element": element_name,
+                                                "type": element_type,
                                                 "interaction": interaction_description,
                                                 "success": bool(
                                                     tool_result.get("success", False)
@@ -353,7 +328,7 @@ class BrowserNavigationAgent:
                                         )
 
                                     elif tool_name == self._extract_urls_tool:
-                                        extracted_links = _normalize_job_links(
+                                        extracted_links = normalize_job_links(
                                             tool_result
                                         )
 
@@ -365,6 +340,7 @@ class BrowserNavigationAgent:
                                         navigation_steps.append(
                                             {
                                                 "element": "Vacancy listing",
+                                                "type": "listing",
                                                 "interaction": "Extract vacancy links",
                                                 "success": bool(extracted_links),
                                             }
@@ -389,6 +365,7 @@ class BrowserNavigationAgent:
                                         navigation_steps.append(
                                             {
                                                 "element": element_name,
+                                                "type": element_type,
                                                 "interaction": interaction_description,
                                                 "success": False,
                                             }
@@ -398,6 +375,7 @@ class BrowserNavigationAgent:
                                         navigation_steps.append(
                                             {
                                                 "element": "Vacancy listing",
+                                                "type": "listing",
                                                 "interaction": "Extract vacancy links",
                                                 "success": False,
                                             }

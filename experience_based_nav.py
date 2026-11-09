@@ -51,6 +51,8 @@ class ExperienceBasedNavigator:
 
                     final_result = None
 
+                    print("Previous nav experience #1: "f"{stored_experience[0]}")
+
                     # Try experiences in order until one succeeds.
                     for experience_index, experience in enumerate(
                         stored_experience

@@ -4,6 +4,7 @@ from datetime import date
 from langchain.chat_models import init_chat_model
 
 from browser_nav_agent import BrowserNavigationAgent
+from experience_based_nav import ExperienceBasedNavigator
 from model_factory import create_llm
 from nav_experience_store import NavExperienceStore
 from vacancy_filter_agent import VacancyFilterAgent
@@ -73,45 +74,91 @@ async def main() -> None:
 
     # Retrieve previous navigation experiences for each website.
     experiences: dict[str, list[dict]] = {}
+    target_urls_with_exp = []
+    target_urls_without_exp = []
 
     for target_url in target_urls:
         framework = identify_framework(target_url)
+
         previous_records = experience_store.retrieve(
             framework=framework,
             limit=10,
         )
 
-        experiences[target_url] = [
-            record["experiences"]
-            for record in previous_records
-        ]
+        if previous_records:
+            experiences[target_url] = [
+                record["experiences"]
+                for record in previous_records
+            ]
+            target_urls_with_exp.append(target_url)
+        else:
+            target_urls_without_exp.append(target_url)
 
         print(
-            f"[*] Retrieved {len(experiences[target_url])} "
+            f"[*] Retrieved {len(experiences.get(target_url, []))} "
             f"experiences for {target_url} ({framework})."
         )
 
-    # Discover candidate vacancy URLs using previous experiences.
-    browser_agent = BrowserNavigationAgent(
+
+    # Attempt deterministic navigation for websites with experiences.
+    exp_based_navigator = ExperienceBasedNavigator()
+
+    nav_results = await exp_based_navigator.run(
+        target_urls=target_urls_with_exp,
+        experiences=experiences,
+        headless=args.headless,
+    )
+
+
+    # Identify websites requiring LLM navigation.
+    failed_urls = [
+        result.url
+        for result in nav_results
+        if not (
+            result.termination_reason == "extraction_complete"
+            and result.result_count > 0
+        )
+    ]
+
+    # Include websites without previous experiences.
+    urls_for_agent = target_urls_without_exp + failed_urls
+
+
+    # Use the LLM navigator for new websites and failed replays.
+    browser_nav_agent = BrowserNavigationAgent(
         keywords=args.keywords,
         location=args.location,
         language=args.language,
         llm=llm,
     )
 
-    navigation_results = await browser_agent.run(
-        target_urls=target_urls,
-        experiences=experiences,
+    agentic_nav_results = await browser_nav_agent.run(
+        target_urls=urls_for_agent,
         headless=args.headless,
     )
 
-    # Store successful navigation experiences and collect vacancy links.
+    # Combine successful navigation results.
+    successful_nav_results = [
+        result
+        for result in nav_results
+        if result.termination_reason == "extraction_complete"
+        and result.result_count > 0
+    ]
+
+    successful_agentic_results = [
+        result
+        for result in agentic_nav_results
+        if result.termination_reason == "extraction_complete"
+        and result.result_count > 0
+    ]
+
+    # Store successful experiences discovered by navigation agent, and collect vacancy links.
     links: list[JobLink] = []
 
-    for result in navigation_results:
+    for result in successful_agentic_results:
         framework = identify_framework(result.url)
 
-        if result.result_count > 0:
+        if result.experience:
             experience_id = experience_store.store(
                 framework=framework,
                 result_count=result.result_count,
@@ -120,15 +167,13 @@ async def main() -> None:
 
             if experience_id:
                 print(
-                    f"[*] Stored navigation experience for "
+                    f"\n[*] Stored navigation experience for "
                     f"{result.url} ({framework})."
                 )
-        else:
-            print(
-                f"[*] No vacancy links found for {result.url}; "
-                "experience not stored."
-            )
 
+        links.extend(result.job_links)
+
+    for result in successful_nav_results:
         links.extend(result.job_links)
 
     # Filter candidates deterministically using URL patterns and ATS domains.
@@ -145,7 +190,7 @@ async def main() -> None:
     ]
 
     print(
-        f"[*] {len(links)} links discovered; "
+        f"\n[*] {len(links)} links discovered; "
         f"{len(filtered_links)} candidates remain after URL filtering."
     )
 
