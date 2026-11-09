@@ -57,6 +57,9 @@ class BrowserNavigationAgent:
         self.location = location
         self.language = language
         self.llm = llm
+        self._page_state_tool = "get_page_state"
+        self._interact_tool = "interact"
+        self._extract_urls_tool = "extract_urls"
 
     def _build_system_prompt(self, experiences) -> str:
         return f"""
@@ -73,10 +76,10 @@ class BrowserNavigationAgent:
 
         Use the following approach:
 
-        1. OBSERVE: Always call `get_page_state` before deciding what to do.
+        1. OBSERVE: Always call `{self._page_state_tool}` before deciding what to do.
         2. DECIDE: Prioritise the next applicable successful interaction from previous experiences. Otherwise, choose the best action based on the current page state and search criteria.        
-        3. ACT: Use `interact` to navigate the website or apply relevant job-search filters. Avoid unrelated inputs and interactions.
-        4. VERIFY: After every `interact` call, call `get_page_state` to verify the outcome. Never call `interact` twice consecutively.
+        3. ACT: Use `{self._interact_tool}` to navigate the website or apply relevant job-search filters. Avoid unrelated inputs and interactions.
+        4. VERIFY: After every `{self._interact_tool}` call, call `{self._page_state_tool}` to verify the outcome. Never call `{self._interact_tool}` twice consecutively.
 
         Navigation guidelines:
         - Focus on careers pages, job listings, and vacancy search interfaces.
@@ -165,15 +168,15 @@ class BrowserNavigationAgent:
                         tools = [
                             StructuredTool.from_function(
                                 coroutine=browser_tools.get_page_state,
-                                name="get_page_state",
+                                name=self._page_state_tool,
                             ),
                             StructuredTool.from_function(
                                 coroutine=browser_tools.interact,
-                                name="interact",
+                                name=self._interact_tool,
                             ),
                             StructuredTool.from_function(
                                 coroutine=browser_tools.extract_urls,
-                                name="extract_urls",
+                                name=self._extract_urls_tool,
                             ),
                         ]
 
@@ -289,7 +292,7 @@ class BrowserNavigationAgent:
                                 element_name = ""
                                 interaction_description = ""
 
-                                if tool_name == "interact":
+                                if tool_name == self._interact_tool:
                                     element_id = tool_args.get("element_id")
                                     action = tool_args.get("action", "")
                                     value = tool_args.get("value", "")
@@ -332,12 +335,12 @@ class BrowserNavigationAgent:
                                         tool_args
                                     )
 
-                                    if tool_name == "get_page_state":
+                                    if tool_name == self._page_state_tool:
                                         # Save the latest page state so that
                                         # state IDs can be mapped to element names.
                                         current_page_state = tool_result
 
-                                    elif tool_name == "interact":
+                                    elif tool_name == self._interact_tool:
                                         # Record the actual interaction outcome.
                                         navigation_steps.append(
                                             {
@@ -349,7 +352,7 @@ class BrowserNavigationAgent:
                                             }
                                         )
 
-                                    elif tool_name == "extract_urls":
+                                    elif tool_name == self._extract_urls_tool:
                                         extracted_links = _normalize_job_links(
                                             tool_result
                                         )
@@ -382,7 +385,7 @@ class BrowserNavigationAgent:
                                     )
 
                                     # Record failed interactions.
-                                    if tool_name == "interact":
+                                    if tool_name == self._interact_tool:
                                         navigation_steps.append(
                                             {
                                                 "element": element_name,
@@ -391,7 +394,7 @@ class BrowserNavigationAgent:
                                             }
                                         )
 
-                                    elif tool_name == "extract_urls":
+                                    elif tool_name == self._extract_urls_tool:
                                         navigation_steps.append(
                                             {
                                                 "element": "Vacancy listing",
