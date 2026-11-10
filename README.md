@@ -2,13 +2,50 @@
 
 Agentic JobFinder is a command-line application that discovers job vacancies matching specified keywords, location, and language across multiple careers websites.
 
-The application uses a **multi-agent architecture** with specialized agents for navigating careers websites, extracting vacancy URLs and identifying vacancies that semantically match the search criteria. Deterministic filtering complements the agents to improve efficiency and reduce irrelevant results.
+The application uses a **multi-agent architecture** with specialized agents for navigating careers websites, extracting vacancy URLs, and identifying vacancies that semantically match the search criteria. Deterministic filtering complements the agents to improve efficiency and reduce irrelevant results.
 
-**Experience-based self-learning** enables the application to improve its navigation of careers websites over time. It stores successful navigation experiences associated with applicant tracking system (ATS) platforms and other career site providers, then retrieves and reuses relevant experiences during subsequent searches. This allows the navigation agent to leverage previously successful strategies when visiting familiar platforms while adapting its approach to unfamiliar websites.
+A key feature is **experience-based self-learning**, which enables the application to learn from and reuse previously successful browser navigation strategies. Navigation experiences are stored and associated with applicant tracking system (ATS) platforms and other careers website providers. When revisiting a familiar platform, the application first attempts to replay a stored experience through deterministic browser automation. This avoids unnecessary LLM calls for websites that can be navigated using previously discovered strategies.
 
-Navigation experiences are currently stored in a local SQL database using SQLite. This lightweight persistence mechanism allows the application to retain and reuse experiences across separate runs.
+When no suitable experience is available, or deterministic replay fails, the application falls back to its LLM-powered navigation agent to explore the website and discover a new navigation strategy. Successful experiences are then stored for future reuse. This creates a continuous learning cycle in which the application becomes increasingly efficient as it encounters more careers websites.
 
-Playwright powers browser automation, while LangChain provides the agent orchestration and LLM integration. The current implementation Supports multiple reasoning-model providers, including OpenAI, Anthropic, and Google Gemini, through a unified LangChain interface.
+The interplay between experience-based deterministic navigation and LLM-powered agentic navigation can be illustrated as follows:
+
+                    Target URLs
+                         |
+                  Retrieve Experiences
+                         |
+              +----------+-----------+
+              |                      |
+       Experience Found       No Experience
+              |                      |
+    ExperienceBasedNavigator         |
+              |                      |
+       +------+-------+              |
+       |              |              |
+    Success         Failure          |
+       |              |              |
+       |              +-------+------+
+       |                      |
+       |             BrowserNavigationAgent
+       |                      |
+       +----------+-----------+
+                  |
+          Successful Results
+                  |
+          Store Experiences
+                  |
+          Collect Vacancy Links
+                  |
+          Deterministic URL Filter
+                  |
+          VacancyFilterAgent
+                  |
+          Final Matching Vacancies
+
+
+Navigation experiences are currently stored in a local SQLite database, allowing the application to retain and reuse learned strategies across separate runs.
+
+Playwright powers browser automation, while LangChain provides agent orchestration and LLM integration. The current implementation supports multiple reasoning-model providers, including OpenAI, Anthropic, and Google Gemini, through a unified LangChain interface.
 
 Matching vacancy URLs are printed to standard output.
 
