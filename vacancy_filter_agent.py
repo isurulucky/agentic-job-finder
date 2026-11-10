@@ -25,9 +25,12 @@ class VacancyFilterAgent:
             return []
 
         extract_prompt = f"""
-        Search criteria: {self.keywords}
-        Preferred location: {self.location}
-        Preffered language: {self.language}
+        You are a vacancy matching assistant.
+
+        Search criteria:
+        - Job keywords: {self.keywords}
+        - Preferred location: {self.location}
+        - Preferred language: {self.language}
 
         Candidate vacancies:
         {[
@@ -35,12 +38,35 @@ class VacancyFilterAgent:
             for job in job_links
         ]}
 
-        Select every vacancy that matches the search criteria, preferred location and language.
+        Your task is to identify ALL potentially relevant vacancies.
 
-        Consider both direct keyword matches and contextual similarity.
-        Do not return only the best match.
-        Do not invent URLs or return vacancies that are not in the candidates.
-        Return all matching vacancies in the job_links field.
+        Matching instructions:
+
+        1. Job relevance:
+        - Consider job titles, responsibilities, technologies, and required skills.
+        - Consider direct keyword matches as well as semantic similarity.
+        - Include related engineering roles even if their titles do not exactly match the search keywords.
+        - Do not require an exact keyword match.
+
+        2. Location:
+        - Prefer vacancies in the requested location.
+        - Do not automatically reject a vacancy if its location is missing.
+        - Consider relocation possibilities where relevant.
+
+        3. Language:
+        - Consider the preferred language when evaluating vacancies.
+        - Do not reject a vacancy merely because its language requirements are not mentioned in the available text.
+
+        4. Incomplete information:
+        - A short title or incomplete description is not sufficient evidence to reject an otherwise relevant vacancy.
+        - If a vacancy could reasonably match the criteria, include it.
+
+        5. Output:
+        - Favor recall over precision.
+        - Return every potentially relevant vacancy, not just the best matches.
+        - Never invent URLs.
+        - Only return URLs from the candidate list.
+        - Return matching vacancies in the job_links field.
         """
 
         result = await self.extractor.ainvoke(extract_prompt)
