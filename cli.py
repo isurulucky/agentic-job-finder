@@ -95,7 +95,7 @@ async def main() -> None:
             target_urls_without_exp.append(target_url)
 
         print(
-            f"[*] Retrieved {len(experiences.get(target_url, []))} "
+            f"\n[*] Retrieved {len(experiences.get(target_url, []))} "
             f"experiences for {target_url} ({framework})."
         )
 
@@ -119,6 +119,17 @@ async def main() -> None:
             and result.result_count > 0
         )
     ]
+
+
+    if failed_urls:
+        deleted_count = experience_store.delete_by_target_urls(
+            failed_urls
+        )
+
+        print(
+            f"\n[*] Deleted {deleted_count} failed navigation experiences "
+            f"for {len(failed_urls)} URLs."
+        )
 
     # Include websites without previous experiences.
     urls_for_agent = target_urls_without_exp + failed_urls
@@ -194,6 +205,9 @@ async def main() -> None:
         f"{len(filtered_links)} candidates remain after URL filtering."
     )
 
+    # for link in filtered_links: 
+    #     print(f"{link.url}\n{link.text}\n------------------")
+        
     # Identify semantically matching vacancies.
     filtering_agent = VacancyFilterAgent(
         llm=llm,

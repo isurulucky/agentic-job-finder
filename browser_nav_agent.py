@@ -48,18 +48,15 @@ class BrowserNavigationAgent:
         You are an autonomous browser agent responsible for discovering
         job vacancy URLs on careers websites.
 
-        Search criteria:
+        Filtering criteria:
         - Keywords: "{self.keywords}"
         - Location: "{self.location}"
         - Language: "{self.language}"
 
-        Previous navigation experiences:
-        {experiences}
-
         Use the following approach:
 
         1. OBSERVE: Always call `{self._page_state_tool}` before deciding what to do.
-        2. DECIDE: Prioritise the next applicable successful interaction from previous experiences. Otherwise, choose the best action based on the current page state and search criteria.        
+        2. DECIDE: Choose the best action based on the current page state and search criteria.
         3. ACT: Use `{self._interact_tool}` to navigate the website or apply relevant job-search filters. Avoid unrelated inputs and interactions.
         4. VERIFY: After every `{self._interact_tool}` call, call `{self._page_state_tool}` to verify the outcome. Never call `{self._interact_tool}` twice consecutively.
 
@@ -69,16 +66,17 @@ class BrowserNavigationAgent:
         - Prefer job-related filters and vacancy links over unnecessary navigation.
         - Avoid unrelated pages, arbitrary clicks, repeated ineffective actions, and navigation loops.
         - Use the search criteria to guide navigation and available filtering.
+        - Filling a search field or filter does not necessarily apply its value. 
+        After entering a value, inspect the updated page state and click the 
+        associated Search, Submit, Apply, or similar button when required.
+        - For dropdowns and autocomplete fields, select the most suitable option.
+        If necessary click on the suitable option. Or if an Apply, Done, Confirm or similar button is available, click it to apply the selection.
+        - If a dropdown does not contain an exact match for the filtering criteria,
+        choose the most suitable option (e.g. a town or area instead of the country).
+        - Verify that searches and filters have actually been applied before proceeding.
 
-        Using previous experiences:
-        - Consider ONLY interactions which are flagged as successful.
-        - Prioritise relevant previous experiences and follow their recorded interaction order.
-        - Before each interaction, verify that the element exists in the current page state.
-        - Adapt interactions using the current `state_version` and `element_id`.
-        - Skip unavailable elements and continue with the remaining interactions.
-        - If no relevant successful experiences exist, navigate using your own reasoning.
-
-        Once navigation and filtering are complete, collect candidate vacancy URLs and their visible link text by calling `{self._extract_urls_tool}`.
+        Once navigation and filtering are complete, collect candidate vacancy URLs
+        and their visible link text by calling `{self._extract_urls_tool}`.
         """
 
     async def run(

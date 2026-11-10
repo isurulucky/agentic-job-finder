@@ -152,3 +152,62 @@ class NavExperienceStore:
             }
             for row in rows
         ]
+    def delete(self, experience_uuid: str) -> bool:
+        """
+        Delete a stored navigation experience by UUID.
+
+        Returns:
+            True if a record was deleted, otherwise False.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM navigation_experiences
+                WHERE uuid = ?
+                """,
+                (experience_uuid,),
+            )
+
+            return cursor.rowcount > 0
+        
+    def delete_by_target_urls(self, target_urls: list[str]) -> int:
+        """
+        Delete stored experiences associated with the given target URLs.
+
+        Returns:
+            Number of deleted records.
+        """
+        if not target_urls:
+            return 0
+
+        deleted_count = 0
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT uuid, experiences
+                FROM navigation_experiences
+                """
+            ).fetchall()
+
+            for row in rows:
+                experiences = json.loads(row["experiences"])
+
+                # Support both a single experience and a list of experiences.
+                if isinstance(experiences, dict):
+                    experiences = [experiences]
+
+                if any(
+                    experience.get("target_url") in target_urls
+                    for experience in experiences
+                ):
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM navigation_experiences
+                        WHERE uuid = ?
+                        """,
+                        (row["uuid"],),
+                    )
+                    deleted_count += cursor.rowcount
+
+        return deleted_count
