@@ -366,43 +366,43 @@ class BrowserTools:
                 "next_step": "get_page_state"
             }
 
-        locator = self.page.locator(
-            f"[element-id='{element_id}']"
-        ).first
-
-        target = await locator.evaluate("""
-        (el) => {
-            const label = el.id
-                ? document.querySelector(
-                    `label[for="${CSS.escape(el.id)}"]`
-                )
-                : null;
-
-            return (
-                label?.innerText ||
-                el.closest('label')?.innerText ||
-                el.getAttribute('aria-label') ||
-                el.getAttribute('title') ||
-                el.placeholder ||
-                el.innerText ||
-                el.value ||
-                ''
-            )
-            .replace(/\\s+/g, ' ')
-            .trim()
-            .substring(0, 120);
-        }
-        """)
-
-        print(
-            f"\n[*] Interacting "
-            f"| state={state_version}:{element_id} "
-            f"| action={action.upper()} "
-            f"| target='{target}' "
-            f"| value='{value}'"
-        )
-
         try:
+            locator = self.page.locator(
+                f"[element-id='{element_id}']"
+            ).first
+
+            target = await locator.evaluate("""
+            (el) => {
+                const label = el.id
+                    ? document.querySelector(
+                        `label[for="${CSS.escape(el.id)}"]`
+                    )
+                    : null;
+
+                return (
+                    label?.innerText ||
+                    el.closest('label')?.innerText ||
+                    el.getAttribute('aria-label') ||
+                    el.getAttribute('title') ||
+                    el.placeholder ||
+                    el.innerText ||
+                    el.value ||
+                    ''
+                )
+                .replace(/\\s+/g, ' ')
+                .trim()
+                .substring(0, 120);
+            }
+            """)
+
+            print(
+                f"\n[*] Interacting "
+                f"| state={state_version}:{element_id} "
+                f"| action={action.upper()} "
+                f"| target='{target}' "
+                f"| value='{value}'"
+            )
+
             if await locator.count() == 0 or not await locator.is_visible():
                 return {
                     "success": False,
@@ -423,7 +423,6 @@ class BrowserTools:
 
             elif action == "fill":
                 await locator.fill(value, timeout=3000)
-                await locator.press("Enter")
 
             elif action == "check":
                 await locator.check(timeout=5000)
