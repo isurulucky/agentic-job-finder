@@ -422,7 +422,7 @@ class BrowserTools:
                 await locator.click(timeout=5000)
 
             elif action == "fill":
-                await locator.fill(value, timeout=3000)
+                await locator.fill(value, timeout=5000)
 
             elif action == "check":
                 await locator.check(timeout=5000)
@@ -445,7 +445,7 @@ class BrowserTools:
 
                 await locator.select_option(
                     label=value,
-                    timeout=3000
+                    timeout=5000
                 )
 
             else:

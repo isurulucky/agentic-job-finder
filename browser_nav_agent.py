@@ -67,13 +67,10 @@ class BrowserNavigationAgent:
         - Avoid unrelated pages, arbitrary clicks, repeated ineffective actions, and navigation loops.
         - Use the search criteria to guide navigation and available filtering.
         - Filling a search field or filter does not necessarily apply its value. 
-        After entering a value, inspect the updated page state and click the 
-        associated Search, Submit, Apply, or similar button when required.
+        After entering a value, inspect the updated page state and click the  associated Search, Submit, Apply, or similar button when required.
         - For dropdowns and autocomplete fields, select the most suitable option.
-        If necessary click on the suitable option. Or if an Apply, Done, Confirm or similar button is available, click it to apply the selection.
-        - If a dropdown does not contain an exact match for the filtering criteria,
-        choose the most suitable option (e.g. a town or area instead of the country).
-        - Verify that searches and filters have actually been applied before proceeding.
+        - If a dropdown does not contain an exact match for the filtering criteria, choose the most suitable option (e.g. a town or area instead of the country) by clicking on it.
+        - If an Apply, Done, Confirm or similar button is available, click it to apply the selection. Verify that searches and filters have actually been applied before proceeding.
 
         Once navigation and filtering are complete, collect candidate vacancy URLs
         and their visible link text by calling `{self._extract_urls_tool}`.

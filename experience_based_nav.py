@@ -118,7 +118,6 @@ class ExperienceBasedNavigator:
                                 element_name = step.get("element", "")
                                 stored_type = step.get("type", "")
                                 interaction = step.get("interaction", "").strip()
-
                                 # Handle vacancy URL extraction.
                                 if (
                                     interaction.lower() == "extract vacancy links"
@@ -291,6 +290,8 @@ class ExperienceBasedNavigator:
                                                 "success": True,
                                             })
 
+                                            await page.wait_for_timeout(3000)
+
                                             # Refresh page state after success.
                                             current_page_state = (
                                                 await browser_tools.get_page_state()
@@ -338,8 +339,8 @@ class ExperienceBasedNavigator:
                                                 "interaction": interaction,
                                                 "success": True,
                                             })
-
                                             break
+
                                         print(
                                             f"\n[!] Interaction failed for "
                                             f"'{candidate.get('name', '')}': {exc}"
