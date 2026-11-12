@@ -101,7 +101,11 @@ async def main() -> None:
 
 
     # Attempt deterministic navigation for websites with experiences.
-    exp_based_navigator = ExperienceBasedNavigator()
+    exp_based_navigator = ExperienceBasedNavigator(
+        keywords=args.keywords,
+        location=args.location,
+        language=args.language,
+    )
 
     nav_results = await exp_based_navigator.run(
         target_urls=target_urls_with_exp,

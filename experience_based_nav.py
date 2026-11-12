@@ -21,9 +21,15 @@ class ExperienceBasedNavigator:
     """Navigate careers websites deterministically and extract candidate vacancy URLs based on previous experience."""
     def __init__(
         self,
+        keywords: str,
+        location: str,
+        language: str,
         navigation_timeout_millis: int = 30_000
 
     ) -> None:
+        self.keywords = keywords
+        self.location = location
+        self.language = language
         self.navigation_timeout_millis = navigation_timeout_millis
 
     async def run(
@@ -228,6 +234,14 @@ class ExperienceBasedNavigator:
                                     )
                                     termination_reason = "unsupported_interaction"
                                     break
+
+                                # Resolve parameter placeholders using the current search criteria.
+                                value = (
+                                    value
+                                    .replace("{{keywords}}", self.keywords)
+                                    .replace("{{location}}", self.location)
+                                    .replace("{{language}}", self.language)
+                                )
 
                                 interaction_succeeded = False
 

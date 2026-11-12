@@ -19,3 +19,6 @@ def normalize_job_links(result: object) -> list[JobLink]:
         item if isinstance(item, JobLink) else JobLink.model_validate(item)
         for item in result
     ]
+
+def normalize_value(text: str) -> str:
+    return " ".join(str(text).casefold().split())

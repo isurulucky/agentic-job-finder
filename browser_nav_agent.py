@@ -9,7 +9,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
 
 from tools import BrowserTools, JobLink
-from nav_result import WebsiteNavigationResult, normalize_job_links
+from nav_result import WebsiteNavigationResult, normalize_job_links, normalize_value
 
 
 def _serialize_default(obj: object) -> object:
@@ -271,6 +271,25 @@ class BrowserNavigationAgent:
                                     action = tool_args.get("action", "")
                                     value = tool_args.get("value", "")
 
+                                    normalized_value = normalize_value(value)
+
+                                    # Determine whether the entered value represents a search parameter.
+                                    if value and normalized_value == normalize_value(self.keywords):
+                                        stored_value = "{{keywords}}"
+
+                                    elif value and normalized_value == normalize_value(self.location):
+                                        stored_value = "{{location}}"
+
+                                    elif (
+                                        value
+                                        and self.language
+                                        and normalized_value == normalize_value(self.language)
+                                    ):
+                                        stored_value = "{{language}}"
+
+                                    else:
+                                        stored_value = value
+
                                     elements = current_page_state.get("elements", [])
 
                                     matched_element = next(
@@ -291,11 +310,11 @@ class BrowserNavigationAgent:
                                     if action == "click":
                                         interaction_description = "Click"
                                     elif action == "fill":
-                                        interaction_description = f"Enter text: {value}"
+                                        interaction_description = f"Enter text: {stored_value}"
                                     elif action == "check":
                                         interaction_description = "Check"
                                     elif action == "select":
-                                        interaction_description = f"Select option: {value}"
+                                        interaction_description = f"Select option: {stored_value}"
                                     else:
                                         interaction_description = str(action)
 
