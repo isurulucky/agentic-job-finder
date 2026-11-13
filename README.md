@@ -1,14 +1,14 @@
-# 🚀 Yet Another Agentic Job Hunter
+# 🚀 (Yet Another) Agentic Job Scout
 
 ### Because finding a job shouldn't feel like a full-time job.
 
-Meet **Agentic Job Hunter**: your tireless, browser-wielding job-hunting sidekick. Give it some keywords, a location, and a language, point it at a bunch of careers websites, and let the agents do the legwork.
+Meet **Agentic Job Scout**: your tireless, browser-wielding job-hunting sidekick. Give it some keywords, a location, and a language, point it at a bunch of careers websites, and let the agents do the legwork.
 
 It explores careers pages, hunts down vacancy links, and figures out which jobs are actually relevant to your search. Less tab-hopping, more opportunities.
 
 ## 🧠 Not Just Another Scraper
 
-Agentic Job Hunter uses a **multi-agent architecture**, where each component has a job of its own (pun absolutely intended).
+Agentic Job Scout uses a **multi-agent architecture**, where each component has a job of its own (pun absolutely intended).
 
 - 🌐 **BrowserNavigationAgent** — explores careers websites and figures out how to navigate them.
 - 🔍 **VacancyFilterAgent** — evaluates candidate vacancies and finds the ones that match your search criteria.
@@ -18,7 +18,7 @@ But here's where things get interesting...
 
 ## 🧬 It Learns. It Remembers. It Gets Faster.
 
-Agentic Job Hunter features **experience-based self-learning**.
+Agentic Job Scout features **experience-based self-learning**.
 
 Every successful navigation strategy can be saved and reused. Experiences are associated with applicant tracking system (ATS) platforms and other careers website providers, so the application can recognize familiar websites and avoid rediscovering how to navigate them.
 
@@ -33,7 +33,7 @@ Here's how the magic happens:
 ### The Learning Loop
 
 ```text
-                 🎯 Target URLs
+                 🎯 Target Career Site URLs
                        |
               🧠 Retrieve Experiences
                        |
@@ -45,7 +45,7 @@ Here's how the magic happens:
              |                   |
        +-----+-----+             |
        |           |             |
-    Success      Failure        |
+    Success      Failure         |
        |           |             |
        |           +------+------+
        |                  |
@@ -53,7 +53,7 @@ Here's how the magic happens:
        |                  |
        +--------+---------+
                 |
-       ✅ Successful Results
+        ✅ Successful Results
                 |
         💾 Store New Experiences
                 |
@@ -162,12 +162,12 @@ Don't forget to set `ANTHROPIC_API_KEY` before running it.
 
 Why remember to look for jobs when your agent can do it for you?
 
-You can schedule Agentic Job Hunter as a cron job and let it search for fresh opportunities every morning.
+You can schedule Agentic Job Scout as a cron job and let it search for fresh opportunities every morning.
 
 For example, to run it every day at **8:00 AM** and append the results to a log file:
 
 ```cron
-0 8 * * * cd /absolute/path/to/project && /absolute/path/to/venv/bin/python cli.py --urls "https://catawiki.careers/vacancies,https://careers.adyen.com/" --keywords "Software Engineer" --location "Europe" --language "English" --headless "True" >> /absolute/path/to/JobHunter.log 2>&1
+0 8 * * * cd /absolute/path/to/project && /absolute/path/to/venv/bin/python cli.py --urls "https://catawiki.careers/vacancies,https://careers.adyen.com/" --keywords "Software Engineer" --location "Europe" --language "English" --headless "True" >> /absolute/path/to/jobscout.log 2>&1
 ```
 
 Replace the project and virtual environment paths with your own.
@@ -180,4 +180,4 @@ Now go make coffee. Your agent has a job to do. ☕
 
 ### Happy job hunting! 🎯
 
-*May your searches be relevant, your navigation deterministic, and your vacancy list never-ending. And yet, may you not have to run this agent ever again!*
+*"May your searches be relevant, your navigation deterministic, and your vacancy list never-ending. Yet, may I forever remain the agent you no longer need!" - AJS*
