@@ -1,70 +1,138 @@
-# Agentic JobFinder
+# 🚀 Yet Another Agentic Job Hunter
 
-Agentic JobFinder is a command-line application that discovers job vacancies matching specified keywords, location, and language across multiple careers websites.
+### Because finding a job shouldn't feel like a full-time job.
 
-The application uses a **multi-agent architecture** with specialized agents for navigating careers websites, extracting vacancy URLs, and identifying vacancies that semantically match the search criteria. Deterministic filtering complements the agents to improve efficiency and reduce irrelevant results.
+Meet **Agentic Job Hunter**: your tireless, browser-wielding job-hunting sidekick. Give it some keywords, a location, and a language, point it at a bunch of careers websites, and let the agents do the legwork.
 
-A key feature is **experience-based self-learning**, which enables the application to learn from and reuse previously successful browser navigation strategies. Navigation experiences are stored and associated with applicant tracking system (ATS) platforms and other careers website providers. When revisiting a familiar platform, the application first attempts to replay a stored experience through deterministic browser automation. This avoids unnecessary LLM calls for websites that can be navigated using previously discovered strategies.
+It explores careers pages, hunts down vacancy links, and figures out which jobs are actually relevant to your search. Less tab-hopping, more opportunities.
 
-When no suitable experience is available, or deterministic replay fails, the application falls back to its LLM-powered navigation agent to explore the website and discover a new navigation strategy. Successful experiences are then stored for future reuse. This creates a continuous learning cycle in which the application becomes increasingly efficient as it encounters more careers websites.
+## 🧠 Not Just Another Scraper
 
-The interplay between experience-based deterministic navigation and LLM-powered agentic navigation can be illustrated as follows:
+Agentic Job Hunter uses a **multi-agent architecture**, where each component has a job of its own (pun absolutely intended).
 
-                    Target URLs
-                         |
-                  Retrieve Experiences
-                         |
-              +----------+-----------+
-              |                      |
-       Experience Found       No Experience
-              |                      |
-    ExperienceBasedNavigator         |
-              |                      |
-       +------+-------+              |
-       |              |              |
-    Success         Failure          |
-       |              |              |
-       |              +-------+------+
-       |                      |
-       |             BrowserNavigationAgent
-       |                      |
-       +----------+-----------+
-                  |
-          Successful Results
-                  |
-          Store Experiences
-                  |
-          Collect Vacancy Links
-                  |
-          Deterministic URL Filter
-                  |
-          VacancyFilterAgent
-                  |
-          Final Matching Vacancies
+- 🌐 **BrowserNavigationAgent** — explores careers websites and figures out how to navigate them.
+- 🔍 **VacancyFilterAgent** — evaluates candidate vacancies and finds the ones that match your search criteria.
+- ⚡ **Deterministic URL filtering** — narrows down candidate links before semantic filtering.
 
+But here's where things get interesting...
 
-Navigation experiences are currently stored in a local SQLite database, allowing the application to retain and reuse learned strategies across separate runs.
+## 🧬 It Learns. It Remembers. It Gets Faster.
 
-Playwright powers browser automation, while LangChain provides agent orchestration and LLM integration. The current implementation supports multiple reasoning-model providers, including OpenAI, Anthropic, and Google Gemini, through a unified LangChain interface.
+Agentic Job Hunter features **experience-based self-learning**.
 
-Matching vacancy URLs are printed to standard output.
+Every successful navigation strategy can be saved and reused. Experiences are associated with applicant tracking system (ATS) platforms and other careers website providers, so the application can recognize familiar websites and avoid rediscovering how to navigate them.
 
-### How to Use
+Here's how the magic happens:
 
-- Install the dependencies using `pip install -r requirements.txt`.
-- Navigate to the project directory.
-- Generate your API key and set it as a environment variable; for Open AI models, set the `OPENAI_API_KEY` environment variable.
-- Run the application using `python cli.py`.
+1. 🧠 **Remember:** Retrieve previously stored navigation experiences for each target website.
+2. 🤖 **Replay:** If an experience exists, `ExperienceBasedNavigator` attempts to replay it using deterministic browser automation.
+3. 🔄 **Fallback:** If no experience exists, or replay fails, `BrowserNavigationAgent` takes over and explores the website using an LLM.
+4. 💾 **Learn:** Successful agentic navigation experiences are stored for future use.
+5. 🎯 **Filter:** Vacancy URLs are collected, filtered deterministically, and passed to `VacancyFilterAgent` for semantic matching.
 
-The following command-line arguments are supported:
+### The Learning Loop
 
-- Mandatory `--urls`: Comma-separated URLs of careers or vacancy websites to search.
-- Mandatory `--keywords`: Job search keywords, such as `Software Engineer` or `Python Developer`.
-- Mandatory `--location`: Target job location, such as `Europe` or `Netherlands`.
-- Mandatory `--language`: Required vacancy language, such as `English`.
-- Optional `--headless`: Runs the browser in headless mode if specified as `True`. 
+```text
+                 🎯 Target URLs
+                       |
+              🧠 Retrieve Experiences
+                       |
+             +---------+---------+
+             |                   |
+      Experience Found      No Experience
+             |                   |
+   ExperienceBasedNavigator      |
+             |                   |
+       +-----+-----+             |
+       |           |             |
+    Success      Failure        |
+       |           |             |
+       |           +------+------+
+       |                  |
+       |       BrowserNavigationAgent
+       |                  |
+       +--------+---------+
+                |
+       ✅ Successful Results
+                |
+        💾 Store New Experiences
+                |
+        🔗 Collect Vacancy Links
+                |
+        ⚡ Deterministic URL Filter
+                |
+        🤖 VacancyFilterAgent
+                |
+        🎉 Matching Vacancies!
+```
 
-### Example
+The navigation experiences live in a local **SQLite database**, so the application remembers what it learned even after it exits. No need to teach it the same website twice!
+
+## 🛠️ Under the Hood
+
+A few familiar tools make all this possible:
+
+| Technology | What it does |
+|---|---|
+| 🐍 Python | Powers the application |
+| 🎭 Playwright | Handles browser automation |
+| 🦜 LangChain | Provides agent orchestration and LLM integration |
+| 🗄️ SQLite | Stores navigation experiences |
+| 🧠 OpenAI, Anthropic & Google Gemini | Provide the reasoning capabilities |
+
+Multiple reasoning-model providers are supported through a unified LangChain interface.
+
+The final matching vacancy URLs are printed to standard output.
+
+## 🏁 Get Started
+
+Ready to send your job-hunting sidekick to work?
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configure your API key
+
+Generate an API key for your chosen model provider and set it as an environment variable.
+
+For OpenAI:
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+```
+
+For Anthropic:
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+```
+
+### 3. Launch the job hunt
+
+Navigate to the project directory and run:
+
+```bash
+python cli.py
+```
+
+## 🎛️ Command-Line Controls
+
+Give your agent a few instructions before it heads out.
+
+| Argument | Required? | Description | Example |
+|---|---|---|---|
+| `--urls` | ✅ Yes | Comma-separated careers or vacancy website URLs | `https://careers.example.com` |
+| `--keywords` | ✅ Yes | Job titles or search keywords | `Software Engineer` |
+| `--location` | ✅ Yes | Preferred job location | `Netherlands` |
+| `--language` | ✅ Yes | Required vacancy language | `English` |
+| `--headless` | ❌ No | Run the browser without displaying its UI | `True` |
+| `--model` | ❌ No | Select the LLM model | `claude-sonnet-4-6` |
+| `--provider` | ❌ No | Select the LLM provider | `anthropic` |
+
+### Example: Find Software Engineering Jobs
 
 ```bash
 python cli.py \
@@ -74,9 +142,11 @@ python cli.py \
   --language "English"
 ```
 
-Use a different model:
+### Example: Bring Your Own Brain 🧠
 
-```bash 
+Want to use Anthropic instead?
+
+```bash
 python cli.py \
   --urls "https://careers.example.com" \
   --keywords "Python Developer" \
@@ -86,14 +156,28 @@ python cli.py \
   --provider "anthropic"
 ```
 
-This requires environment variable `ANTHROPIC_API_KEY` to be set. 
+Don't forget to set `ANTHROPIC_API_KEY` before running it.
 
-## Running as a Cron Job
+## ⏰ Make It a Daily Habit
 
-The application can be scheduled as a cron job to periodically search careers websites for matching vacancies. For example, to run the search every day at 8:00 AM and append the output to a log file:
+Why remember to look for jobs when your agent can do it for you?
 
-```bash
-0 8 * * * cd /absolute/path/to/project && /absolute/path/to/venv/bin/python cli.py --urls "https://catawiki.careers/vacancies,https://careers.adyen.com/" --keywords "Software Engineer" --location "Europe" --language "English" --headless "True" >> /absolute/path/to/jobfinder.log 2>&1
+You can schedule Agentic Job Hunter as a cron job and let it search for fresh opportunities every morning.
+
+For example, to run it every day at **8:00 AM** and append the results to a log file:
+
+```cron
+0 8 * * * cd /absolute/path/to/project && /absolute/path/to/venv/bin/python cli.py --urls "https://catawiki.careers/vacancies,https://careers.adyen.com/" --keywords "Software Engineer" --location "Europe" --language "English" --headless "True" >> /absolute/path/to/JobHunter.log 2>&1
 ```
 
-Tested with Python 3.11.
+Replace the project and virtual environment paths with your own.
+
+Now go make coffee. Your agent has a job to do. ☕
+
+---
+
+**Tested with Python 3.11.**
+
+### Happy job hunting! 🎯
+
+*May your searches be relevant, your navigation deterministic, and your vacancy list never-ending. And yet, may you not have to run this agent ever again!*
